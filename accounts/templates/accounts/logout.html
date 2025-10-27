@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Logget ud</title>
+    <style>
+      :root{ --page-bg:#f3f4f6; --main-bg:#ffffff; --text-dark:#0f1724; --muted:#9ca3af }
+      html,body{height:100%;margin:0;font-family:Segoe UI, Roboto, Arial, sans-serif;background:var(--page-bg);color:var(--text-dark)}
+      .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+      .card{background:var(--main-bg);padding:28px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.06);width:100%;max-width:520px}
+      h1{margin:0 0 12px;font-size:1.25rem}
+      a.button-like{background:#050505;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none}
+      p{margin:8px 0}
+    </style>
+  </head>
+  <body>
+    <div class="center">
+      <div class="card">
+        <h1>Logget ud</h1>
+        <p>Du er blevet logget ud.</p>
+        <p><a class="button-like" href="{% url 'accounts:login' %}">Log ind igen</a></p>
+      </div>
+    </div>
+  </body>
+</html>

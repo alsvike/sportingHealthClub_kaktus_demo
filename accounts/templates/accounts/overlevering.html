@@ -1,0 +1,535 @@
+{% extends 'accounts/base.html' %}
+
+{% block title %}Overlevering{% endblock %}
+
+{% block content %}
+  <h1>Overlevering</h1>
+
+  <div class="card" style="padding:12px;">
+    <div class="calendar-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="prevMonth" aria-label="Previous month" style="background:none;border:none;color:var(--muted);font-weight:600;cursor:pointer">◀</button>
+  <div style="font-weight:700" id="monthLabel">Måned</div>
+        <button id="nextMonth" aria-label="Next month" style="background:none;border:none;color:var(--muted);font-weight:600;cursor:pointer">▶</button>
+      </div>
+    </div>
+
+    <div class="calendar-wrapper">
+      <div id="calendar" class="calendar-grid" style="display:grid;gap:6px;width:100%">
+      <!-- Weekday headers -->
+  <div class="wd">Man</div>
+  <div class="wd">Tir</div>
+  <div class="wd">Ons</div>
+  <div class="wd">Tor</div>
+  <div class="wd">Fre</div>
+  <div class="wd">Lør</div>
+  <div class="wd">Søn</div>
+      <!-- day cells injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <style>
+  /* ensure predictable sizing */
+  *{box-sizing:border-box}
+  .field-heading{font-size:0.82rem;color:var(--muted);margin-bottom:6px;font-weight:600}
+  /* make the calendar fill the available content area but keep a sane max */
+  .calendar-wrapper{width:calc(100% - 48px);max-width:1200px;margin:0 24px}
+  .calendar-grid{width:100%;grid-template-columns:repeat(7,1fr)}
+  .calendar-grid .wd{padding:6px 8px;font-size:0.85rem;color:var(--muted);text-align:left}
+  .day-cell{min-height:72px;padding:8px;border-radius:8px;background:linear-gradient(180deg,#fff,#f8fafc);box-shadow:0 2px 6px rgba(2,6,23,0.04);position:relative;display:flex;flex-direction:column}
+    .day-num{font-weight:600;color:var(--text-dark);font-size:0.95rem}
+    .event-pill{display:inline-block;margin-top:6px;padding:4px 6px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-size:0.75rem}
+    .muted-cell{background:transparent;color:var(--muted)}
+    .day-actions{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+    .small-btn{font-size:0.8rem;padding:6px 8px;border-radius:6px;border:1px solid rgba(0,0,0,0.06);background:#fff;cursor:pointer}
+  .trials-list{margin-top:6px;display:flex;flex-direction:column;gap:6px;max-height:140px;overflow:auto;padding-right:6px}
+  .trial-empty{color:var(--muted);font-size:0.9rem;padding:6px}
+  .trial-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px;border-radius:6px;background:#ffffff;border:1px solid rgba(2,6,23,0.04)}
+  .trial-row.signedup{background:#ecfdf5;border-color:#86efac}
+  .trial-row.didnotsignup{background:#fff1f2;border-color:#fca5a5}
+  .trial-meta em{font-style:normal;color:inherit;opacity:0.9}
+    .trial-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .trial-meta{font-size:0.8rem;color:var(--muted)}
+    .time-sep{color:var(--muted);padding:0 6px}
+    .field-row{display:flex;gap:6px;align-items:center;margin-top:6px}
+      .time-invalid{border-color:#f87171 !important}
+    /* support both native time and our text-based HH:MM inputs */
+    .field-row input[type=time], .field-row input[type=text]{padding:6px;border-radius:6px;border:1px solid #e6eef5}
+    /* Prevent inputs inside .field-row from flexing to full width (caused horizontal scroll) */
+    .field-row input{flex:0 0 auto}
+    /* Compact fixed-width time inputs for HH:MM (only a few characters) */
+    .field-row input.time-compact{width:64px;min-width:48px;max-width:88px;text-align:center;font-variant-numeric:tabular-nums}
+    @media (max-width:760px){
+      .field-row input.time-compact{width:56px}
+    }
+  textarea.shift-text, textarea.manager-text{width:100%;min-height:56px;padding:8px;border-radius:6px;border:1px solid #e6eef5;overflow:hidden;resize:none}
+
+    /* Responsive adjustments */
+    /* Prefer fewer columns on medium-large screens to avoid horizontal scroll for ~1200px viewports */
+    @media (max-width:1400px){
+      /* slightly reduce columns on wide-but-not-full screens */
+      .calendar-grid{grid-template-columns:repeat(5,1fr)}
+      .calendar-grid .wd{display:none}
+    }
+    /* ensure 3 columns at ~1265px so day cards are readable */
+    @media (max-width:1300px){
+      .calendar-grid{grid-template-columns:repeat(3,1fr)}
+    }
+    @media (max-width:900px){
+      /* move to 3 columns */
+      .calendar-grid{grid-template-columns:repeat(3,1fr)}
+      .day-cell{min-height:60px;padding:6px}
+      .trials-list{max-height:120px}
+    }
+    /* switch to compact two-column stacked view on small screens to avoid horizontal scroll */
+    @media (max-width:760px){
+      .calendar-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+      .day-cell{min-height:56px;padding:8px;font-size:0.9rem}
+      .day-actions{flex-direction:row;gap:6px}
+      .field-row{flex-direction:row}
+      .trials-list{max-height:180px}
+      .shift-text, .manager-text{min-height:48px}
+    }
+    @media (max-width:420px){
+      .calendar-grid{grid-template-columns:repeat(1,1fr)}
+      .day-actions{flex-direction:column}
+      .field-row{flex-direction:column}
+    }
+    /* Save notifier (bottom-right) */
+    #saveNotifier{position:fixed;right:18px;bottom:18px;background:rgba(2,6,23,0.9);color:#fff;padding:8px 12px;border-radius:8px;font-size:0.85rem;box-shadow:0 6px 18px rgba(2,6,23,0.18);opacity:0;transform:translateY(6px);transition:opacity 220ms ease,transform 220ms ease;z-index:120}
+  </style>
+
+  <!-- Add Trial modal -->
+  <div id="trialModal" role="dialog" aria-modal="true" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:60">
+    <div style="background:white;padding:16px;border-radius:8px;min-width:280px;max-width:420px;box-shadow:0 8px 30px rgba(2,6,23,0.2)">
+  <h3 id="modalTitle">Tilføj prøve</h3>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="field-heading">Navn</div>
+  <input id="trialName" placeholder="Navn" style="padding:8px;border-radius:6px;border:1px solid #ddd" />
+        <div class="field-heading">Type</div>
+        <select id="trialType" style="padding:8px;border-radius:6px;border:1px solid #ddd">
+          <option value="Class">Hold</option>
+          <option value="Fitness">Fitness</option>
+        </select>
+        <div class="field-heading">Status</div>
+        <select id="trialStatus" style="padding:8px;border-radius:6px;border:1px solid #ddd">
+          <option value="Pending">Afventer</option>
+          <option value="SignedUp">Tilmeldt</option>
+          <option value="DidNotSignup">Mødte ikke op</option>
+        </select>
+        <div class="field-heading" id="reasonHeading" style="display:none">Årsag (hvis ikke tilmeldt)</div>
+        <textarea id="trialReason" placeholder="Årsag (valgfri)" style="display:none;padding:8px;border-radius:6px;border:1px solid #ddd"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
+          <button id="modalSave" class="small-btn" style="background:#0ea5a4;color:#fff;border:none">Gem prøvetime</button>
+          <button id="modalCancel" class="small-btn">Annuller</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Save notifier element (populated by JS) -->
+    <div id="saveNotifier" aria-live="polite"></div>
+
+  <script>
+    (function(){
+      // last user input timestamp used to decide whether to show "saved" notifier
+  let lastUserInput = Date.now();
+      function markUserTyped(){ lastUserInput = Date.now(); }
+
+      // notifier helper
+      let _notifierTimer = null;
+      function showSavedNotification(text){
+        const el = document.getElementById('saveNotifier');
+        if(!el) return;
+  el.textContent = text || 'Ændringer gemt';
+        el.style.opacity = '1'; el.style.transform = 'translateY(0)';
+        if(_notifierTimer) clearTimeout(_notifierTimer);
+        _notifierTimer = setTimeout(()=>{ el.style.opacity = '0'; el.style.transform = 'translateY(6px)'; _notifierTimer = null; }, 1800);
+      }
+
+      // Schedule a saved notification to appear after the idle threshold following a successful save.
+      // If the user types before the idle threshold elapses, the notification is suppressed.
+      const _savedNotify = { timer: null };
+      const idleThreshold = 3500; // ms to wait after save before showing "saved" when user is idle
+      function scheduleSavedNotification(){
+        // clear previous schedule
+        if(_savedNotify.timer) clearTimeout(_savedNotify.timer);
+        // schedule a check after idleThreshold; show only if user remained idle during that period
+        _savedNotify.timer = setTimeout(()=>{
+          if(Date.now() - lastUserInput >= idleThreshold) showSavedNotification('Ændringer gemt');
+          _savedNotify.timer = null;
+        }, idleThreshold);
+      }
+      // Helpers
+      function csrftoken(){
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';').map(c=>c.trim());
+        for(const c of cookies){
+          if(c.startsWith(name+'=')) return decodeURIComponent(c.split('=')[1]);
+        }
+        return '';
+      }
+
+      const monthLabel = document.getElementById('monthLabel');
+      const calendarEl = document.getElementById('calendar');
+      let now = new Date();
+      let viewYear = now.getFullYear();
+      let viewMonth = now.getMonth(); // 0-11
+
+      // modal elements
+      const modal = document.getElementById('trialModal');
+      const modalTitle = document.getElementById('modalTitle');
+  const modalName = document.getElementById('trialName');
+  const modalType = document.getElementById('trialType');
+  const modalStatus = document.getElementById('trialStatus');
+  const modalReason = document.getElementById('trialReason');
+      const modalReasonHeading = document.getElementById('reasonHeading');
+      const modalCancel = document.getElementById('modalCancel');
+  // modal save button removed; modal will autosave on field changes
+      let modalContext = {date:null, editId:null};
+
+      function openModalFor(dateStr, edit){
+        modalContext.date = dateStr;
+        modalContext.editId = edit ? edit.id : null;
+        modal.style.display = 'flex';
+        if(edit){
+          modalTitle.textContent = 'Rediger prøve';
+          modalName.value = edit.name;
+          modalType.value = edit.trial_type;
+          modalStatus.value = edit.status || 'Pending';
+          modalReason.value = edit.reason || '';
+          modalReason.style.display = (modalStatus.value === 'DidNotSignup') ? 'block' : 'none';
+        } else {
+          modalTitle.textContent = 'Tilføj prøvetime';
+          modalName.value = '';
+          modalType.value = 'Class';
+          modalStatus.value = 'Pending';
+          modalReason.value = '';
+          modalReason.style.display = 'none';
+        }
+        modalName.focus();
+      }
+  modalCancel.addEventListener('click', ()=> modal.style.display = 'none');
+  // ensure modal reason auto-resizes as user types
+  attachAutoResize(modalReason);
+
+      modalStatus.addEventListener('change', ()=>{
+        const show = (modalStatus.value === 'DidNotSignup');
+        modalReason.style.display = show ? 'block' : 'none';
+        if(modalReasonHeading) modalReasonHeading.style.display = show ? 'block' : 'none';
+      });
+
+      // autosave helpers: debounce utility
+      function debounce(fn, wait){
+        let t;
+        return function(...args){
+          clearTimeout(t);
+          t = setTimeout(()=>fn.apply(this,args), wait);
+        }
+      }
+
+      // Strict HH:MM (24-hour) validator
+      function isValidHHMM(v){
+        if(!v) return false;
+        // Accept formats like "HH:MM" or "HH:MM:SS" but we validate hours/minutes only
+        const m = v.match(/^([01]\d|2[0-3]):([0-5]\d)(:?([0-5]\d))?$/);
+        return !!m;
+      }
+
+      // Auto-resize helper for textarea elements: set height to content height and keep it updated
+      function autoResize(el){
+        if(!el) return;
+        // reset to calculate correct scrollHeight
+        el.style.height = 'auto';
+        // add a small offset to avoid scrollbar appearing due to rounding
+        el.style.height = (el.scrollHeight) + 'px';
+      }
+
+      function attachAutoResize(el){
+        if(!el) return;
+        // initial adjustment
+        autoResize(el);
+        // call on input
+        el.addEventListener('input', ()=>{
+          autoResize(el);
+        });
+      }
+
+      function setTimeValidity(input){
+        if(!input) return;
+        const val = input.value && input.value.slice(0,5);
+        if(!val) { input.classList.remove('time-invalid'); return; }
+        if(isValidHHMM(val)) input.classList.remove('time-invalid');
+        else input.classList.add('time-invalid');
+      }
+
+      // Format free-text HHMM -> HH:MM as the user types (keeps only digits, inserts colon)
+      function formatTimeInput(input){
+        if(!input) return;
+        let v = input.value || '';
+        // keep only digits, limit to 4 (HHMM)
+        let digits = v.replace(/\D/g,'').slice(0,4);
+        if(digits.length === 0){ input.value = ''; setTimeValidity(input); return; }
+        if(digits.length <= 2) input.value = digits;
+        else input.value = digits.slice(0,2) + ':' + digits.slice(2);
+        setTimeValidity(input);
+      }
+
+      async function saveTrialFromModal(){
+        const payload = {name: modalName.value.trim(), trial_type: modalType.value, date: modalContext.date, status: modalStatus.value, reason: modalReason.value.trim()};
+        if(!payload.name) return false; // do not create empty
+        try{
+          if(modalContext.editId){
+              const res = await fetch(`/accounts/api/trials/${modalContext.editId}/`, {method: 'PATCH', body: JSON.stringify(payload), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials: 'same-origin'});
+              if(!res.ok){ const txt = await res.text(); console.error('Edit trial failed', res.status, txt); return false; }
+              else { scheduleSavedNotification(); return true; }
+          } else {
+              const res = await fetch('/accounts/api/trials/', {method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials: 'same-origin'});
+              if(res.ok){ const data = await res.json(); modalContext.editId = data.trial.id; scheduleSavedNotification(); return true; }
+              else{ const txt = await res.text(); console.error('Create trial failed', res.status, txt); return false; }
+          }
+        }catch(err){ console.error('saveTrialFromModal error', err); return false; }
+      }
+
+      // Wire Save button: do NOT autosave on field changes; only save when user clicks "Gem prøvetime"
+      const modalSave = document.getElementById('modalSave');
+      if(modalSave){
+        modalSave.addEventListener('click', async ()=>{
+          const ok = await saveTrialFromModal();
+          if(ok){ modal.style.display = 'none'; loadMonth(viewYear, viewMonth); }
+          else { alert('Gem mislykkedes — tjek felterne og prøv igen.'); }
+        });
+      }
+
+  // mark typing for notifier (keep for idle detection only)
+  modalName.addEventListener('input', markUserTyped);
+  modalType.addEventListener('change', markUserTyped);
+  modalStatus.addEventListener('change', markUserTyped);
+  modalReason.addEventListener('input', markUserTyped);
+
+      async function fetchDayDataISO(dateISO){
+        const res = await fetch(`/accounts/api/day/?date=${dateISO}`, {credentials: 'same-origin'});
+        if(!res.ok){ const txt = await res.text(); console.error('day fetch failed', res.status, txt); return null; }
+        return await res.json();
+      }
+
+      function formatISO(y,m,d){
+        const mm = String(m+1).padStart(2,'0');
+        const dd = String(d).padStart(2,'0');
+        return `${y}-${mm}-${dd}`;
+      }
+
+      function createTrialRow(trial, container){
+        const row = document.createElement('div');
+        row.className = 'trial-row';
+        const left = document.createElement('div');
+  const statusMap = { 'Pending': 'Afventer', 'SignedUp': 'Tilmeldt', 'DidNotSignup': 'Blev ikke meldt ind' };
+  const typeMap = { 'Class': 'Hold', 'Fitness': 'Fitness' };
+  const statusLabel = statusMap[trial.status] || 'Afventer';
+  const typeLabel = typeMap[trial.trial_type] || trial.trial_type;
+  left.innerHTML = `<strong>${trial.name}</strong> <div class="trial-meta">${typeLabel} • ${trial.time} • <em>${statusLabel}</em></div>`;
+        if(trial.status === 'DidNotSignup' && trial.reason){
+          const r = document.createElement('div'); r.className='trial-meta'; r.style.marginTop='4px'; r.textContent = 'Årsag: ' + trial.reason; left.appendChild(r);
+        }
+        const actions = document.createElement('div');
+        actions.style.display='flex';
+        actions.style.gap='6px';
+  const edit = document.createElement('button'); edit.className='small-btn'; edit.textContent='Rediger';
+  edit.addEventListener('click', ()=> openModalFor(trial.date, trial));
+  const del = document.createElement('button'); del.className='small-btn'; del.textContent='Slet';
+        del.addEventListener('click', async ()=>{
+          if(!confirm('Slet denne prøve?')) return;
+          const res = await fetch(`/accounts/api/trials/${trial.id}/`, {method:'DELETE', headers:{'X-CSRFToken':csrftoken()}, credentials: 'same-origin'});
+            if(res.ok) loadMonth(viewYear, viewMonth);
+            else{
+              const txt = await res.text(); console.error('Delete failed', res.status, txt); alert('Sletning mislykkedes: '+res.status);
+            }
+        });
+        actions.appendChild(edit); actions.appendChild(del);
+        // apply tint class based on status
+        if(trial.status === 'SignedUp') row.classList.add('signedup');
+        if(trial.status === 'DidNotSignup') row.classList.add('didnotsignup');
+        row.appendChild(left); row.appendChild(actions);
+        return row;
+      }
+
+      function makeCell(dateObj, dayNum){
+        const dateISO = formatISO(dateObj.getFullYear(), dateObj.getMonth(), dayNum);
+        const cell = document.createElement('div');
+        cell.className = 'day-cell';
+        const num = document.createElement('div'); num.className='day-num'; num.textContent=dayNum;
+        cell.appendChild(num);
+
+  const trialsList = document.createElement('div'); trialsList.className='trials-list';
+  const trialsHeading = document.createElement('div'); trialsHeading.className='field-heading'; trialsHeading.textContent = 'Prøvetimer';
+  cell.appendChild(trialsHeading);
+  cell.appendChild(trialsList);
+
+  const actions = document.createElement('div'); actions.className='day-actions';
+  const addBtn = document.createElement('button'); addBtn.className='small-btn'; addBtn.textContent='Tilføj prøvetime';
+  addBtn.addEventListener('click', ()=> openModalFor(dateISO, null));
+  // place Add button under trials list per UX request
+  actions.appendChild(addBtn);
+  cell.appendChild(actions);
+
+        // Cleaning fields (heading above inputs, text-based HH:MM to avoid AM/PM)
+        const cleaningContainer = document.createElement('div');
+        cleaningContainer.style.marginTop = '6px';
+        const cleaningHeading = document.createElement('div'); cleaningHeading.className='field-heading'; cleaningHeading.textContent = 'Rengøring';
+        const cleaningRow = document.createElement('div'); cleaningRow.className='field-row';
+        // use text inputs (HH:MM) so we control formatting and avoid AM/PM displays
+  const inTime = document.createElement('input'); inTime.type='text'; inTime.placeholder='HH:MM'; inTime.inputMode='numeric'; inTime.maxLength = 5; inTime.setAttribute('pattern','[0-2][0-9]:[0-5][0-9]');
+  inTime.classList.add('time-compact');
+        const timeSep = document.createElement('span'); timeSep.className='time-sep'; timeSep.textContent=' - ';
+  const outTime = document.createElement('input'); outTime.type='text'; outTime.placeholder='HH:MM'; outTime.inputMode='numeric'; outTime.maxLength = 5; outTime.setAttribute('pattern','[0-2][0-9]:[0-5][0-9]');
+  outTime.classList.add('time-compact');
+        // autosave cleaning on change
+        async function postCleaning(){
+          const arrivedRaw = inTime.value ? inTime.value.slice(0,5) : '';
+          const leftRaw = outTime.value ? outTime.value.slice(0,5) : '';
+          // validate before posting
+          if(arrivedRaw && !isValidHHMM(arrivedRaw)){
+            inTime.classList.add('time-invalid');
+            console.error('Invalid arrival time, not saving:', arrivedRaw);
+            return;
+          }
+          if(leftRaw && !isValidHHMM(leftRaw)){
+            outTime.classList.add('time-invalid');
+            console.error('Invalid left time, not saving:', leftRaw);
+            return;
+          }
+          const payload = {date: dateISO, arrived: arrivedRaw || null, left: leftRaw || null};
+          try{
+            const res = await fetch('/accounts/api/cleaning/', {method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials:'same-origin'});
+            if(!res.ok){ const txt = await res.text(); console.error('cleaning save failed', res.status, txt); }
+            else { scheduleSavedNotification(); }
+          }catch(e){ console.error('cleaning post error', e); }
+        }
+  const debouncedCleaning = debounce(postCleaning, 600);
+  // format while typing and validate; autosave on change (committed value)
+  inTime.addEventListener('input', ()=>{ formatTimeInput(inTime); markUserTyped(); });
+  outTime.addEventListener('input', ()=>{ formatTimeInput(outTime); markUserTyped(); });
+  inTime.addEventListener('change', debouncedCleaning);
+  outTime.addEventListener('change', debouncedCleaning);
+        cleaningContainer.appendChild(cleaningHeading);
+        cleaningRow.appendChild(inTime); cleaningRow.appendChild(timeSep); cleaningRow.appendChild(outTime);
+        cleaningContainer.appendChild(cleaningRow);
+        cell.appendChild(cleaningContainer);
+
+        // Shift message
+        const shiftArea = document.createElement('div');
+        const shiftText = document.createElement('textarea'); shiftText.className='shift-text'; shiftText.placeholder='Besked til næste vagt';
+        // auto-resize and autosave are separate responsibilities; attach autosize so the textarea grows with content
+        attachAutoResize(shiftText);
+        // autosave shift message
+        async function postShift(){
+          const payload = {date: dateISO, message: shiftText.value};
+          try{
+            const res = await fetch('/accounts/api/shift_message/', {method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials:'same-origin'});
+            if(!res.ok){ const txt = await res.text(); console.error('shift save failed', res.status, txt); }
+            else { scheduleSavedNotification(); }
+          }catch(e){ console.error('shift post error', e); }
+        }
+  const debouncedShift = debounce(postShift, 600);
+  shiftText.addEventListener('input', debouncedShift);
+  shiftText.addEventListener('input', markUserTyped);
+  const shiftHeading = document.createElement('div'); shiftHeading.className='field-heading'; shiftHeading.textContent = 'Besked til næste vagt';
+  shiftArea.appendChild(shiftHeading);
+  shiftArea.appendChild(shiftText);
+        cell.appendChild(shiftArea);
+
+        // Manager message with reply
+        const mgrArea = document.createElement('div');
+        const mgrText = document.createElement('textarea'); mgrText.className='manager-text'; mgrText.placeholder='Besked til leder';
+        const mgrReply = document.createElement('textarea'); mgrReply.className='manager-text'; mgrReply.placeholder='Leders svar (synligt for ledere)';
+        // auto-resize manager textareas so they expand with content
+        attachAutoResize(mgrText);
+        attachAutoResize(mgrReply);
+        // autosave manager message and reply
+        async function postManager(){
+          const payload = {date: dateISO, message: mgrText.value, reply: mgrReply.value};
+          try{
+            const res = await fetch('/accounts/api/manager_message/', {method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials:'same-origin'});
+            if(!res.ok){ const txt = await res.text(); console.error('manager save failed', res.status, txt); }
+            else { scheduleSavedNotification(); }
+          }catch(e){ console.error('manager post error', e); }
+        }
+  const debouncedManager = debounce(postManager, 600);
+  mgrText.addEventListener('input', debouncedManager);
+  mgrReply.addEventListener('input', debouncedManager);
+  mgrText.addEventListener('input', markUserTyped);
+  mgrReply.addEventListener('input', markUserTyped);
+  const mgrHeading = document.createElement('div'); mgrHeading.className='field-heading'; mgrHeading.textContent = 'Besked til leder';
+  const mgrReplyHeading = document.createElement('div'); mgrReplyHeading.className='field-heading'; mgrReplyHeading.textContent = 'Leders svar (synligt for ledere)';
+  mgrArea.appendChild(mgrHeading); mgrArea.appendChild(mgrText); mgrArea.appendChild(mgrReplyHeading); mgrArea.appendChild(mgrReply);
+        cell.appendChild(mgrArea);
+
+        return {cell, trialsList, inTime, outTime, shiftText, mgrText, mgrReply};
+      }
+
+      async function populateCellFor(dateObj, dayNum, wrapper){
+        const dateISO = formatISO(dateObj.getFullYear(), dateObj.getMonth(), dayNum);
+        const data = await fetchDayDataISO(dateISO);
+        if(!data) return;
+        // trials
+        wrapper.trialsList.innerHTML = '';
+        data.trials.forEach(t => wrapper.trialsList.appendChild(createTrialRow(t, wrapper.trialsList)));
+        // cleaning
+        if(data.cleaning){
+          wrapper.inTime.value = data.cleaning.arrived ? data.cleaning.arrived.slice(0,5) : '';
+          wrapper.outTime.value = data.cleaning.left ? data.cleaning.left.slice(0,5) : '';
+          // normalize/format values we just populated and validate
+          formatTimeInput(wrapper.inTime);
+          formatTimeInput(wrapper.outTime);
+        }
+        // shift
+        if(data.shift_message && data.shift_message.message){
+          wrapper.shiftText.value = data.shift_message.message;
+          // adjust height after populating
+          autoResize(wrapper.shiftText);
+        }
+        // manager
+        if(data.manager_message){
+          wrapper.mgrText.value = data.manager_message.message || '';
+          wrapper.mgrReply.value = data.manager_message.reply || '';
+          autoResize(wrapper.mgrText);
+          autoResize(wrapper.mgrReply);
+        }
+      }
+
+      async function loadMonth(y, m){
+        monthLabel.textContent = new Date(y,m,1).toLocaleString(undefined,{month:'long'}) + ' ' + y;
+        while(calendarEl.children.length > 7) calendarEl.removeChild(calendarEl.lastChild);
+        const first = new Date(y, m, 1);
+        const last = new Date(y, m+1, 0);
+        const startOffset = (first.getDay() + 6) % 7;
+        for(let i=0;i<startOffset;i++){
+          const blank = document.createElement('div'); blank.className='wd muted-cell'; blank.innerHTML=''; calendarEl.appendChild(blank);
+        }
+        const wrappers = [];
+        for(let d=1; d<= last.getDate(); d++){
+          const {cell, trialsList, inTime, outTime, shiftText, mgrText, mgrReply} = makeCell(new Date(y,m,d), d);
+          calendarEl.appendChild(cell);
+          wrappers.push({date:new Date(y,m,d), day:d, wrapper:{cell, trialsList, inTime, outTime, shiftText, mgrText, mgrReply}});
+        }
+        const totalCells = calendarEl.children.length;
+        const rem = totalCells % 7;
+        if(rem !== 0){
+          const need = 7 - rem;
+          for(let i=0;i<need;i++){ const blank = document.createElement('div'); blank.className='wd muted-cell'; blank.innerHTML=''; calendarEl.appendChild(blank); }
+        }
+        // populate each day
+        for(const w of wrappers){
+          populateCellFor(w.date, w.day, w.wrapper);
+        }
+      }
+
+      document.getElementById('prevMonth').addEventListener('click', function(){ viewMonth -=1; if(viewMonth<0){ viewMonth=11; viewYear-=1; } loadMonth(viewYear, viewMonth); });
+      document.getElementById('nextMonth').addEventListener('click', function(){ viewMonth +=1; if(viewMonth>11){ viewMonth=0; viewYear+=1; } loadMonth(viewYear, viewMonth); });
+
+      // initial render
+      loadMonth(viewYear, viewMonth);
+    })();
+  </script>
+{% endblock %}

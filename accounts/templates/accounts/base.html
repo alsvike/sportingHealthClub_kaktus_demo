@@ -1,0 +1,117 @@
+
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sporting Health Club{% endblock %}</title>
+    <style>
+      :root{
+        /* use a fixed sidebar width so branding doesn't truncate on typical desktop widths */
+        --sidebar-width:220px;
+        --sidebar-min:160px;
+        --main-bg:#ffffff;
+        --page-bg:#f3f4f6;
+        --sidebar-bg:#050505;
+        --text-dark:#0f1724;
+        --text-light:#ffffff;
+        --muted:#9ca3af;
+        --link:#e5e7eb;
+        --accent:#bdbdbd;
+      }
+
+      html,body{
+        height:100%;
+        margin:0;
+        font-family:Segoe UI, Roboto, Arial, sans-serif;
+        color:var(--text-dark);
+        background:var(--page-bg);
+      }
+
+      .app-shell{display:flex;min-height:100vh;background:var(--page-bg)}
+
+      /* Make the sidebar fixed so main content scrolls independently and footer/logout stays visible */
+      aside.sidebar{
+        position:fixed;
+        top:0;left:0;bottom:0;
+        width:var(--sidebar-width);
+        min-width:var(--sidebar-min);
+        background:var(--sidebar-bg);
+        color:var(--text-light);
+        display:flex;
+        flex-direction:column;
+        padding:24px;
+        box-sizing:border-box;
+        border-right:1px solid rgba(255,255,255,0.03);
+        z-index:1000; /* keep sidebar on top */
+        overflow:visible; /* avoid internal scrolling hiding footer */
+      }
+
+  .brand-block{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  .sidebar .brand{font-weight:700;font-size:1.05rem;letter-spacing:0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0}
+  .sidebar .sub{font-size:0.95rem;color:var(--accent);margin:0}
+  .sidebar .small{font-size:0.8rem;color:var(--muted);margin:0}
+
+      .user-info{margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.02);border-radius:8px}
+      .user-info .username{font-size:0.95rem;font-weight:600}
+      .user-info .roles{font-size:0.78rem;color:var(--muted)}
+
+      nav.nav-items{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+      nav.nav-items a{color:var(--link);text-decoration:none;padding:10px 12px;border-radius:8px;font-weight:500}
+      nav.nav-items a:hover{background:rgba(255,255,255,0.03)}
+
+      .sidebar-footer{margin-top:auto}
+      .sidebar-footer a{color:var(--link);display:block;text-decoration:none;padding:10px 12px;border-radius:8px}
+
+  /* offset main content to accommodate fixed sidebar */
+  main.content{flex:1;padding:32px;box-sizing:border-box;background:var(--main-bg);border-left:1px solid rgba(15,23,36,0.03);margin-left:var(--sidebar-width);position:relative;z-index:0;overflow:auto}
+      .content .card{background:#fff;padding:18px;border-radius:10px;box-shadow:0 4px 18px rgba(2,6,23,0.06)}
+
+      @media (max-width:800px){
+        aside.sidebar{display:none}
+        .app-shell{flex-direction:column}
+        main.content{margin-left:0}
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand">Sporting Health Club</div>
+          <div class="sub">Medarbejderplatform</div>
+          <div class="small">Kaktus Towers</div>
+        </div>
+
+        {# Removed inline top user-info (we show concise info below logout) #}
+
+        <nav class="nav-items">
+          <a href="{% url 'dashboard' %}">Oversigt</a>
+          <a href="{% url 'overlevering' %}">Overlevering</a>
+          {% comment %} additional links can be added here depending on roles {% endcomment %}
+        </nav>
+
+        <div class="sidebar-footer">
+          {% if user.is_authenticated %}
+            <form method="post" action="{% url 'accounts:logout' %}" style="margin:0">
+              {% csrf_token %}
+              <button type="submit" class="logout-btn" style="background:none;border:none;color:var(--link);padding:10px 12px;border-radius:8px;font-weight:500;cursor:pointer">Log ud</button>
+            </form>
+            {# concise single-line label below logout, show full info in title tooltip #}
+            {% with groups=user.groups.all %}
+              <div class="footer-info" style="color:var(--muted);font-size:0.85rem;margin-top:8px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;" title="{{ user.username }}{% if groups %} ({% for g in groups %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% endfor %}){% else %} (No roles){% endif %}">
+                Logget ind som {{ user.username }}
+              </div>
+            {% endwith %}
+          {% else %}
+            <a href="{% url 'accounts:login' %}">Login</a>
+          {% endif %}
+        </div>
+      </aside>
+
+      <main class="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+ </html>
