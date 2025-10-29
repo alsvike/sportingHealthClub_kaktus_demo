@@ -14,4 +14,7 @@ urlpatterns = [
     path('dashboard/', accounts_views.dashboard_view, name='dashboard'),
     path('overlevering/', accounts_views.overlevering_view, name='overlevering'),
     path('cleaning/', accounts_views.cleaning_view, name='cleaning'),
+    # Expose Swagger UI at top-level /swagger
+    path('swagger/', accounts_views.swagger_ui, name='swagger_ui_root'),
+    path('swagger/openapi.yaml', accounts_views.swagger_spec, name='swagger_spec_root'),
 ]
