@@ -84,3 +84,42 @@ class ManagerMessage(models.Model):
             'author': self.author.username if self.author else None,
             'updated_at': self.updated_at.isoformat(),
         }
+
+
+class CleaningTask(models.Model):
+    """A reusable cleaning task template for a weekday.
+
+    weekday: 0=Monday .. 6=Sunday
+    time: textual time (e.g., '06:45')
+    area: area string
+    title: short task title
+    details: longer description
+    status: one of Pending/Done/NotUsed/NotDone
+    """
+    STATUS_CHOICES = (
+        ('Pending', 'Afventer'),
+        ('Done', 'Udført'),
+        ('NotUsed', 'Ikke i brug'),
+        ('NotDone', 'Ikke udført'),
+    )
+
+    weekday = models.IntegerField(help_text='0=Monday .. 6=Sunday')
+    time = models.CharField(max_length=16, blank=True)
+    area = models.CharField(max_length=200, blank=True)
+    title = models.CharField(max_length=200, blank=True)
+    details = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'weekday': self.weekday,
+            'time': self.time,
+            'area': self.area,
+            'title': self.title,
+            'details': self.details,
+            'status': self.status,
+        }
+
+    def __str__(self):
+        return f"[{self.get_weekday_display() if hasattr(self,'get_weekday_display') else self.weekday}] {self.title} ({self.time})"

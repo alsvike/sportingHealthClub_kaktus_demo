@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth import logout
 from django.http import HttpResponseForbidden
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseNotAllowed
@@ -9,6 +9,7 @@ from django.utils.dateparse import parse_date
 from django.contrib.auth.decorators import user_passes_test
 
 from .models import Trial, CleaningRecord, ShiftMessage, ManagerMessage
+from .models import CleaningTask
 import json
 from datetime import datetime
 
@@ -74,7 +75,34 @@ def dashboard_view(request):
 @login_required
 def overlevering_view(request):
     """Placeholder page for Overlevering. Main content intentionally minimal with dummy text for testing."""
-    return render(request, 'accounts/overlevering.html', {'user': request.user})
+    return render(request, 'accounts/overlevering.html', {'user': request.user, 'is_manager': _is_manager(request.user)})
+
+
+@login_required
+def post_login_redirect(request):
+    """Redirect users after login based on their role.
+
+    Receptionists -> Overlevering
+    Managers/Owners/Admins -> Dashboard
+    Fallback -> Overlevering if authenticated
+    """
+    user = request.user
+    # superuser and dashboard-role users go to dashboard
+    if user.is_superuser or user.groups.filter(name__in=['Admin','Administrator','Owner','Manager']).exists():
+        return redirect('dashboard')
+
+    # receptionists should land on overlevering
+    if user.groups.filter(name='Receptionist').exists():
+        return redirect('overlevering')
+
+    # default fallback
+    return redirect('overlevering')
+
+
+@login_required
+def cleaning_view(request):
+    """Placeholder page for Rengøring accessible to all authenticated users."""
+    return render(request, 'accounts/cleaning.html', {})
 
 
 def _is_manager(user):
@@ -120,6 +148,75 @@ def api_day_data(request):
         mgr_msg = {'date': date.isoformat(), 'message': None, 'reply': None}
 
     return JsonResponse({'trials': trials_list, 'cleaning': cleaning, 'shift_message': shift_msg, 'manager_message': mgr_msg})
+
+
+@require_http_methods(['GET','POST'])
+@login_required
+def api_cleaning_tasks(request):
+    """GET: ?weekday=0-6 returns tasks for that weekday. POST: create a new task (weekday, time, area, title, details, status).
+    """
+    if request.method == 'GET':
+        wk = request.GET.get('weekday')
+        try:
+            wk = int(wk) if wk is not None else None
+        except Exception:
+            wk = None
+        if wk is None:
+            return HttpResponseBadRequest('Missing weekday')
+        tasks = CleaningTask.objects.filter(weekday=wk).order_by('time', 'id')
+        return JsonResponse({'tasks': [t.to_dict() for t in tasks]})
+
+    # POST -> create
+    try:
+        payload = json.loads(request.body.decode())
+    except Exception:
+        return HttpResponseBadRequest('Invalid JSON')
+    weekday = payload.get('weekday')
+    try:
+        weekday = int(weekday)
+    except Exception:
+        return HttpResponseBadRequest('Invalid weekday')
+    t = CleaningTask.objects.create(
+        weekday=weekday,
+        time=payload.get('time',''),
+        area=payload.get('area',''),
+        title=payload.get('title',''),
+        details=payload.get('details',''),
+        status=payload.get('status','Pending')
+    )
+    return JsonResponse({'task': t.to_dict()})
+
+
+@require_http_methods(['PUT','PATCH','DELETE'])
+@login_required
+def api_modify_cleaning_task(request, pk):
+    try:
+        task = CleaningTask.objects.get(pk=pk)
+    except CleaningTask.DoesNotExist:
+        return JsonResponse({'error':'not found'}, status=404)
+
+    if request.method in ('PUT','PATCH'):
+        try:
+            payload = json.loads(request.body.decode())
+        except Exception:
+            return HttpResponseBadRequest('Invalid JSON')
+        # allow partial updates
+        if 'status' in payload:
+            task.status = payload.get('status')
+        if 'time' in payload:
+            task.time = payload.get('time','')
+        if 'area' in payload:
+            task.area = payload.get('area','')
+        if 'title' in payload:
+            task.title = payload.get('title','')
+        if 'details' in payload:
+            task.details = payload.get('details','')
+        task.save()
+        return JsonResponse({'task': task.to_dict()})
+
+    if request.method == 'DELETE':
+        task.delete()
+        return JsonResponse({'deleted': True})
 
 
 @require_http_methods(['POST'])

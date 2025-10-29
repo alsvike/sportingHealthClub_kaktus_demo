@@ -1,0 +1,331 @@
+{% extends 'accounts/base.html' %}
+
+{% block title %}Rengøring{% endblock %}
+
+{% block content %}
+  <h1>Rengøring</h1>
+
+  <div class="card" style="padding:16px">
+    
+
+    <!-- Tabs: Mandag - Søndag -->
+    <div class="tabs" style="margin-top:12px">
+      <div role="tablist" aria-label="Ugens dage" class="tablist" style="display:flex;gap:6px;flex-wrap:wrap">
+        <button role="tab" aria-selected="false" aria-controls="panel-mon" id="tab-mon" class="tab-btn">Mandag</button>
+        <button role="tab" aria-selected="false" aria-controls="panel-tue" id="tab-tue" class="tab-btn">Tirsdag</button>
+        <button role="tab" aria-selected="false" aria-controls="panel-wed" id="tab-wed" class="tab-btn">Onsdag</button>
+        <button role="tab" aria-selected="false" aria-controls="panel-thu" id="tab-thu" class="tab-btn">Torsdag</button>
+        <button role="tab" aria-selected="false" aria-controls="panel-fri" id="tab-fri" class="tab-btn">Fredag</button>
+        <button role="tab" aria-selected="false" aria-controls="panel-sat" id="tab-sat" class="tab-btn">Lørdag</button>
+        <button role="tab" aria-selected="false" aria-controls="panel-sun" id="tab-sun" class="tab-btn">Søndag</button>
+      </div>
+
+      <div class="tab-panels" style="margin-top:12px">
+        <section id="panel-mon" role="tabpanel" aria-labelledby="tab-mon" hidden class="tab-panel">
+          <h3>Mandag</h3>
+          <div class="tasks-list" data-weekday="0">Indlæser...</div>
+        </section>
+        <section id="panel-tue" role="tabpanel" aria-labelledby="tab-tue" hidden class="tab-panel">
+          <h3>Tirsdag</h3>
+          <div class="tasks-list" data-weekday="1">Indlæser...</div>
+        </section>
+        <section id="panel-wed" role="tabpanel" aria-labelledby="tab-wed" hidden class="tab-panel">
+          <h3>Onsdag</h3>
+          <div class="tasks-list" data-weekday="2">Indlæser...</div>
+        </section>
+        <section id="panel-thu" role="tabpanel" aria-labelledby="tab-thu" hidden class="tab-panel">
+          <h3>Torsdag</h3>
+          <div class="tasks-list" data-weekday="3">Indlæser...</div>
+        </section>
+        <section id="panel-fri" role="tabpanel" aria-labelledby="tab-fri" hidden class="tab-panel">
+          <h3>Fredag</h3>
+          <div class="tasks-list" data-weekday="4">Indlæser...</div>
+        </section>
+        <section id="panel-sat" role="tabpanel" aria-labelledby="tab-sat" hidden class="tab-panel">
+          <h3>Lørdag</h3>
+          <div class="tasks-list" data-weekday="5">Indlæser...</div>
+        </section>
+        <section id="panel-sun" role="tabpanel" aria-labelledby="tab-sun" hidden class="tab-panel">
+          <h3>Søndag</h3>
+          <div class="tasks-list" data-weekday="6">Indlæser...</div>
+        </section>
+      </div>
+    </div>
+
+  </div>
+
+  <style>
+    /* Tabs styling (keeps look consistent with sidebar/header) */
+    .tab-btn{background:#fff;border:1px solid rgba(2,6,23,0.06);padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+  .tab-btn[aria-selected="true"]{background:#ff6600;color:#fff;border-color:transparent;box-shadow:0 6px 18px rgba(2,6,23,0.08)}
+    .tab-panel{background:transparent;padding:10px;border-radius:6px}
+  </style>
+
+  <script>
+    (function(){
+      const tabs = Array.from(document.querySelectorAll('.tab-btn'));
+      const panels = Array.from(document.querySelectorAll('.tab-panel'));
+      const STORAGE_KEY = 'cleaning_selected_day';
+
+      function activateTab(tab){
+        const id = tab.id;
+        tabs.forEach(t=> t.setAttribute('aria-selected', 'false'));
+        tab.setAttribute('aria-selected','true');
+        // show/hide panels
+        panels.forEach(p=> p.hidden = (p.getAttribute('aria-labelledby') !== id));
+        // persist
+        try{ localStorage.setItem(STORAGE_KEY, id); }catch(e){}
+        tab.focus();
+        // load tasks for this tab immediately
+        try{ loadTasksForTab(tab); }catch(e){ console.warn('loadTasksForTab failed', e); }
+      }
+
+      // click handlers
+      tabs.forEach(t=> t.addEventListener('click', (e)=>{ activateTab(e.currentTarget); }));
+
+      // keyboard navigation (left/right)
+      tabs.forEach((t,i)=> t.addEventListener('keydown', (e)=>{
+        if(e.key === 'ArrowRight' || e.key === 'ArrowDown'){
+          e.preventDefault(); const next = tabs[(i+1) % tabs.length]; activateTab(next);
+        } else if(e.key === 'ArrowLeft' || e.key === 'ArrowUp'){
+          e.preventDefault(); const prev = tabs[(i-1+tabs.length) % tabs.length]; activateTab(prev);
+        } else if(e.key === 'Home'){
+          e.preventDefault(); activateTab(tabs[0]);
+        } else if(e.key === 'End'){
+          e.preventDefault(); activateTab(tabs[tabs.length-1]);
+        }
+      }));
+
+      // On load, try to restore selected tab or pick current weekday
+      function initialSelect(){
+        // Always open the tab for today's weekday by default (overrides stored selection)
+        const now = new Date(); const weekday = now.getDay();
+        const map = {1:'tab-mon',2:'tab-tue',3:'tab-wed',4:'tab-thu',5:'tab-fri',6:'tab-sat',0:'tab-sun'};
+        let toActivate = document.getElementById(map[weekday]);
+        // fallback to stored selection if today's tab is missing for some reason
+        if(!toActivate){ try{ const stored = localStorage.getItem(STORAGE_KEY); if(stored) toActivate = document.getElementById(stored); }catch(_){} }
+        if(toActivate) activateTab(toActivate);
+      }
+
+      // initialize
+      initialSelect();
+
+      // Small helper to read CSRF token from cookie
+      function csrftoken(){
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';').map(c=>c.trim());
+        for(const c of cookies){ if(c.startsWith(name+'=')) return decodeURIComponent(c.split('=')[1]); }
+        return '';
+      }
+
+      // Autosave / saved-notifier helpers (same UX as overlevering)
+      let lastUserInput = Date.now();
+      function markUserTyped(){ lastUserInput = Date.now(); }
+      const idleThreshold = 3500; // ms
+      let _savedNotifyTimer = null;
+      function showSavedNotification(text){
+        let el = document.getElementById('saveNotifier');
+        if(!el){
+          el = document.createElement('div'); el.id = 'saveNotifier'; el.style.position='fixed'; el.style.right='18px'; el.style.bottom='18px'; el.style.background='rgba(2,6,23,0.9)'; el.style.color='#fff'; el.style.padding='8px 12px'; el.style.borderRadius='8px'; el.style.zIndex='120'; document.body.appendChild(el);
+        }
+        el.textContent = text || 'Ændringer gemt'; el.style.opacity='1'; el.style.transform='translateY(0)';
+        if(_savedNotifyTimer) clearTimeout(_savedNotifyTimer);
+        _savedNotifyTimer = setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(6px)'; _savedNotifyTimer = null; }, 1800);
+      }
+      const _savedNotifier = { timer: null };
+      function scheduleSavedNotification(){
+        if(_savedNotifier.timer) clearTimeout(_savedNotifier.timer);
+        _savedNotifier.timer = setTimeout(()=>{
+          if(Date.now() - lastUserInput >= idleThreshold) showSavedNotification('Ændringer gemt');
+          _savedNotifier.timer = null;
+        }, idleThreshold);
+      }
+
+      // Fetch tasks for the clicked tab and render them
+      async function loadTasksForTab(tab){
+        if(!tab) return;
+        const panelId = tab.getAttribute('aria-controls');
+        const panel = document.getElementById(panelId);
+        if(!panel) return;
+        const listEl = panel.querySelector('.tasks-list');
+        if(!listEl) return;
+        const weekday = listEl.getAttribute('data-weekday');
+        listEl.textContent = 'Indlæser...';
+        try{
+          const res = await fetch(`/accounts/api/cleaning_tasks/?weekday=${weekday}`, {credentials:'same-origin'});
+          if(!res.ok){ listEl.textContent = 'Fejl ved hentning'; return; }
+          const data = await res.json();
+          const tasks = data.tasks || [];
+          // Render tasks returned from the server only. Seeding/creation is handled server-side via migrations.
+          renderTasks(listEl, tasks);
+        }catch(e){ console.error('loadTasksForTab fetch error', e); listEl.textContent = 'Fejl'; }
+      }
+
+      function renderTasks(listEl, tasks){
+        listEl.innerHTML = '';
+        if(!tasks || tasks.length === 0){ listEl.innerHTML = '<div style="color:var(--muted)">Ingen opgaver</div>'; return; }
+        // If this panel is Monday (weekday=0), render two shift sections: morning and evening
+        const weekday = Number(listEl.getAttribute('data-weekday'));
+        const ul = document.createElement('div'); ul.style.display='flex'; ul.style.flexDirection='column'; ul.style.gap='8px';
+
+        function renderTaskRow(parent, t){
+          const row = document.createElement('div'); row.style.display='flex'; row.style.alignItems='center'; row.style.justifyContent='space-between'; row.style.gap='8px'; row.style.padding='8px'; row.style.border='1px solid rgba(2,6,23,0.03)'; row.style.borderRadius='8px';
+          const left = document.createElement('div'); left.style.flex='1';
+          // Show only the task title as requested (no time, area or details)
+          const title = document.createElement('div'); title.innerHTML = `<strong>${t.title || ''}</strong>`;
+          left.appendChild(title);
+          const controls = document.createElement('div'); controls.style.display='flex'; controls.style.flexDirection='column'; controls.style.alignItems='flex-end';
+          // status select
+          const select = document.createElement('select'); select.style.padding='6px'; select.style.borderRadius='6px'; select.dataset.id = t.id;
+          const options = [ ['Pending','Afventer'], ['Done','Udført'], ['NotUsed','Ikke i brug'], ['NotDone','Ikke udført'] ];
+          options.forEach(o=>{ const opt = document.createElement('option'); opt.value=o[0]; opt.textContent=o[1]; if(o[0] === t.status) opt.selected = true; select.appendChild(opt); });
+
+          if(!window._cleaningTaskTimers) window._cleaningTaskTimers = new Map();
+          select.addEventListener('change', (e)=>{
+            const newStatus = e.target.value;
+            markUserTyped();
+            const taskId = t.id;
+            const prev = window._cleaningTaskTimers.get(taskId);
+            if(prev) clearTimeout(prev);
+            const timer = setTimeout(async ()=>{
+              try{
+                const res = await fetch(`/accounts/api/cleaning_tasks/${taskId}/`, {method:'PATCH', body: JSON.stringify({status:newStatus}), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials:'same-origin'});
+                if(!res.ok){ const txt = await res.text(); console.error('Status update failed', res.status, txt); alert('Opdatering fejlede'); }
+                else { scheduleSavedNotification(); }
+              }catch(err){ console.error('Status update error', err); alert('Opdatering fejlede'); }
+              window._cleaningTaskTimers.delete(taskId);
+            }, 600);
+            window._cleaningTaskTimers.set(taskId, timer);
+          });
+
+          controls.appendChild(select);
+          row.appendChild(left); row.appendChild(controls);
+          parent.appendChild(row);
+        }
+
+  // Friday: only render morning section
+  if(weekday === 4){
+      const morningHeading = document.createElement('div'); morningHeading.style.fontWeight='700'; morningHeading.style.marginBottom='6px'; morningHeading.textContent = '06:45 - 15:00';
+      listEl.appendChild(morningHeading);
+          const morningContainer = document.createElement('div'); morningContainer.style.display='flex'; morningContainer.style.flexDirection='column'; morningContainer.style.gap='8px';
+          // Include all tasks for Friday under the single morning heading so the listed evening tasks are visible
+          const morningTasks = tasks.slice().sort((a,b)=>{
+            const aEven = (a.area === 'evening') ? 1 : 0;
+            const bEven = (b.area === 'evening') ? 1 : 0;
+            return aEven - bEven;
+          });
+      if(morningTasks.length === 0){ const empty = document.createElement('div'); empty.style.color='var(--muted)'; empty.textContent = 'Ingen opgaver'; morningContainer.appendChild(empty); }
+      morningTasks.forEach(t=> renderTaskRow(morningContainer, t));
+      listEl.appendChild(morningContainer);
+    return;
+  }
+
+  // Mon-Thu: render both morning and evening sections
+  if(weekday === 0 || weekday === 1 || weekday === 2 || weekday === 3){
+      // Morning section
+      const morningHeading = document.createElement('div'); morningHeading.style.fontWeight='700'; morningHeading.style.marginBottom='6px'; morningHeading.textContent = '06:45 - 15:00';
+      listEl.appendChild(morningHeading);
+      const morningContainer = document.createElement('div'); morningContainer.style.display='flex'; morningContainer.style.flexDirection='column'; morningContainer.style.gap='8px';
+      const morningTasks = tasks.filter(t => (t.area === 'morning') || (!t.area));
+      if(morningTasks.length === 0){ const empty = document.createElement('div'); empty.style.color='var(--muted)'; empty.textContent = 'Ingen opgaver'; morningContainer.appendChild(empty); }
+      morningTasks.forEach(t=> renderTaskRow(morningContainer, t));
+      listEl.appendChild(morningContainer);
+
+      // Evening section
+      const eveningHeading = document.createElement('div'); eveningHeading.style.fontWeight='700'; eveningHeading.style.marginTop='12px'; eveningHeading.style.marginBottom='6px'; eveningHeading.textContent = '15:00 - 20:30';
+      listEl.appendChild(eveningHeading);
+      const eveningContainer = document.createElement('div'); eveningContainer.style.display='flex'; eveningContainer.style.flexDirection='column'; eveningContainer.style.gap='8px';
+      const eveningTasks = tasks.filter(t => t.area === 'evening');
+      if(eveningTasks.length === 0){ const empty2 = document.createElement('div'); empty2.style.color='var(--muted)'; empty2.textContent = 'Ingen opgaver'; eveningContainer.appendChild(empty2); }
+      eveningTasks.forEach(t=> renderTaskRow(eveningContainer, t));
+      listEl.appendChild(eveningContainer);
+    return;
+  }
+
+  // Saturday: single heading 09:00 - 14:00, include all tasks under it
+  if(weekday === 5){
+          const morningHeading = document.createElement('div'); morningHeading.style.fontWeight='700'; morningHeading.style.marginBottom='6px'; morningHeading.textContent = '09:00 - 14:00';
+          listEl.appendChild(morningHeading);
+          const morningContainer = document.createElement('div'); morningContainer.style.display='flex'; morningContainer.style.flexDirection='column'; morningContainer.style.gap='8px';
+          // show all tasks under the single heading; keep morning tasks first
+          const morningTasks = tasks.slice().sort((a,b)=>{
+            const aEven = (a.area === 'evening') ? 1 : 0;
+            const bEven = (b.area === 'evening') ? 1 : 0;
+            return aEven - bEven;
+          });
+          if(morningTasks.length === 0){ const empty = document.createElement('div'); empty.style.color='var(--muted)'; empty.textContent = 'Ingen opgaver'; morningContainer.appendChild(empty); }
+          morningTasks.forEach(t=> renderTaskRow(morningContainer, t));
+          listEl.appendChild(morningContainer);
+      return;
+  }
+
+  // Sunday: single heading 09:00 - 13:00, include all tasks under it
+  if(weekday === 6){
+          const morningHeading = document.createElement('div'); morningHeading.style.fontWeight='700'; morningHeading.style.marginBottom='6px'; morningHeading.textContent = '09:00 - 13:00';
+          listEl.appendChild(morningHeading);
+          const morningContainer = document.createElement('div'); morningContainer.style.display='flex'; morningContainer.style.flexDirection='column'; morningContainer.style.gap='8px';
+          // show all tasks under the single heading; keep morning tasks first
+          const morningTasks = tasks.slice().sort((a,b)=>{
+            const aEven = (a.area === 'evening') ? 1 : 0;
+            const bEven = (b.area === 'evening') ? 1 : 0;
+            return aEven - bEven;
+          });
+          if(morningTasks.length === 0){ const empty = document.createElement('div'); empty.style.color='var(--muted)'; empty.textContent = 'Ingen opgaver'; morningContainer.appendChild(empty); }
+          morningTasks.forEach(t=> renderTaskRow(morningContainer, t));
+          listEl.appendChild(morningContainer);
+      return;
+  }
+
+        // Default rendering for non-Monday panels
+        tasks.forEach(t=>{
+          const row = document.createElement('div'); row.style.display='flex'; row.style.alignItems='center'; row.style.justifyContent='space-between'; row.style.gap='8px'; row.style.padding='8px'; row.style.border='1px solid rgba(2,6,23,0.03)'; row.style.borderRadius='8px';
+          const left = document.createElement('div'); left.style.flex='1';
+          // Show only the task title as requested (no time, area or details)
+          const title = document.createElement('div'); title.innerHTML = `<strong>${t.title || ''}</strong>`;
+          left.appendChild(title);
+          const controls = document.createElement('div'); controls.style.display='flex'; controls.style.flexDirection='column'; controls.style.alignItems='flex-end';
+          // status select
+          const select = document.createElement('select'); select.style.padding='6px'; select.style.borderRadius='6px'; select.dataset.id = t.id;
+          const options = [ ['Pending','Afventer'], ['Done','Udført'], ['NotUsed','Ikke i brug'], ['NotDone','Ikke udført'] ];
+          options.forEach(o=>{ const opt = document.createElement('option'); opt.value=o[0]; opt.textContent=o[1]; if(o[0] === t.status) opt.selected = true; select.appendChild(opt); });
+
+          // per-task debounce timer map (on the window for lifetime)
+          if(!window._cleaningTaskTimers) window._cleaningTaskTimers = new Map();
+
+          select.addEventListener('change', (e)=>{
+            const newStatus = e.target.value;
+            markUserTyped();
+            const taskId = t.id;
+            // clear existing timer for this task
+            const prev = window._cleaningTaskTimers.get(taskId);
+            if(prev) clearTimeout(prev);
+            const timer = setTimeout(async ()=>{
+              try{
+                const res = await fetch(`/accounts/api/cleaning_tasks/${taskId}/`, {method:'PATCH', body: JSON.stringify({status:newStatus}), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials:'same-origin'});
+                if(!res.ok){ const txt = await res.text(); console.error('Status update failed', res.status, txt); alert('Opdatering fejlede'); }
+                else { scheduleSavedNotification(); }
+              }catch(err){ console.error('Status update error', err); alert('Opdatering fejlede'); }
+              window._cleaningTaskTimers.delete(taskId);
+            }, 600);
+            window._cleaningTaskTimers.set(taskId, timer);
+          });
+
+          controls.appendChild(select);
+
+          row.appendChild(left); row.appendChild(controls);
+          ul.appendChild(row);
+        });
+        listEl.appendChild(ul);
+      }
+
+      // sample loader for Monday
+      const sampleBtn = document.getElementById('load-sample-mon');
+      if(sampleBtn){
+        // sample loader removed: task templates are created server-side via migration
+        sampleBtn.style.display = 'none';
+      }
+    })();
+  </script>
+
+{% endblock %}
+

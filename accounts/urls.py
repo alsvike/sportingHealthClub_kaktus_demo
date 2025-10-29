@@ -7,6 +7,7 @@ app_name = 'accounts'
 urlpatterns = [
     path('login/', auth_views.LoginView.as_view(template_name='accounts/login.html'), name='login'),
     path('logout/', views.logout_view, name='logout'),
+    path('post-login-redirect/', views.post_login_redirect, name='post_login_redirect'),
 ]
 
 # separate small urlconf for dashboard to keep project urls tidy
@@ -20,6 +21,8 @@ api_urlpatterns = [
     path('api/trials/', views.api_create_trial, name='api_create_trial'),
     path('api/trials/<int:pk>/', views.api_modify_trial, name='api_modify_trial'),
     path('api/cleaning/', views.api_cleaning_update, name='api_cleaning_update'),
+    path('api/cleaning_tasks/', views.api_cleaning_tasks, name='api_cleaning_tasks'),
+    path('api/cleaning_tasks/<int:pk>/', views.api_modify_cleaning_task, name='api_modify_cleaning_task'),
     path('api/shift_message/', views.api_shift_message, name='api_shift_message'),
     path('api/manager_message/', views.api_manager_message, name='api_manager_message'),
 ]

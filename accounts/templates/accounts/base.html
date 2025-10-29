@@ -86,9 +86,25 @@
         {# Removed inline top user-info (we show concise info below logout) #}
 
         <nav class="nav-items">
-          <a href="{% url 'dashboard' %}">Oversigt</a>
-          <a href="{% url 'overlevering' %}">Overlevering</a>
-          {% comment %} additional links can be added here depending on roles {% endcomment %}
+          {% if user.is_authenticated %}
+            {# Show 'Oversigt' only when the user has dashboard access (admins/managers/owners) #}
+            {% if can_view_dashboard %}
+              <a href="{% url 'dashboard' %}">Oversigt</a>
+            {% endif %}
+
+            {# Overlevering is relevant to receptionists/managers/owners/admins only #}
+            {% if is_receptionist or is_manager or is_owner or is_admin %}
+              <a href="{% url 'overlevering' %}">Overlevering</a>
+            {% endif %}
+
+            {# Rengøring: placeholder page available to any authenticated user/group #}
+            <a href="{% url 'cleaning' %}">Rengøring</a>
+
+        {# Additional links: example placeholder — add real links here and wrap with role flags (is_admin, etc.) #}
+          {% else %}
+            {# Show minimal navigation for anonymous users, if desired #}
+            <a href="{% url 'accounts:login' %}">Login</a>
+          {% endif %}
         </nav>
 
         <div class="sidebar-footer">

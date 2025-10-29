@@ -13,4 +13,5 @@ urlpatterns = [
     path('accounts/', include('accounts.urls', namespace='accounts')),
     path('dashboard/', accounts_views.dashboard_view, name='dashboard'),
     path('overlevering/', accounts_views.overlevering_view, name='overlevering'),
+    path('cleaning/', accounts_views.cleaning_view, name='cleaning'),
 ]

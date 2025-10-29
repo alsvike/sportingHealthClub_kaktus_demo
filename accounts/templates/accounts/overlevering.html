@@ -39,6 +39,7 @@
   .calendar-grid .wd{padding:6px 8px;font-size:0.85rem;color:var(--muted);text-align:left}
   .day-cell{min-height:72px;padding:8px;border-radius:8px;background:linear-gradient(180deg,#fff,#f8fafc);box-shadow:0 2px 6px rgba(2,6,23,0.04);position:relative;display:flex;flex-direction:column}
     .day-num{font-weight:600;color:var(--text-dark);font-size:0.95rem}
+  .day-week{font-size:0.78rem;color:var(--muted);margin-top:2px}
     .event-pill{display:inline-block;margin-top:6px;padding:4px 6px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-size:0.75rem}
     .muted-cell{background:transparent;color:var(--muted)}
     .day-actions{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
@@ -64,6 +65,9 @@
       .field-row input.time-compact{width:56px}
     }
   textarea.shift-text, textarea.manager-text{width:100%;min-height:56px;padding:8px;border-radius:6px;border:1px solid #e6eef5;overflow:hidden;resize:none}
+    /* collapsible manager-reply container (hidden until manager message exists / saved) */
+    .mgr-reply-container{max-height:0;opacity:0;overflow:hidden;transition:max-height 260ms ease,opacity 200ms ease;margin-top:8px}
+    .mgr-reply-container.visible{max-height:240px;opacity:1}
 
     /* Responsive adjustments */
     /* Prefer fewer columns on medium-large screens to avoid horizontal scroll for ~1200px viewports */
@@ -98,6 +102,8 @@
     }
     /* Save notifier (bottom-right) */
     #saveNotifier{position:fixed;right:18px;bottom:18px;background:rgba(2,6,23,0.9);color:#fff;padding:8px 12px;border-radius:8px;font-size:0.85rem;box-shadow:0 6px 18px rgba(2,6,23,0.18);opacity:0;transform:translateY(6px);transition:opacity 220ms ease,transform 220ms ease;z-index:120}
+    /* highlight used when scrolling to today's cell */
+    .day-cell.today-highlight{box-shadow:0 10px 30px rgba(16,185,129,0.12);border:2px solid #34d399;transform:scale(1.01);transition:transform 260ms ease,box-shadow 260ms ease;border-radius:10px}
   </style>
 
   <!-- Add Trial modal -->
@@ -121,7 +127,7 @@
         <div class="field-heading" id="reasonHeading" style="display:none">Årsag (hvis ikke tilmeldt)</div>
         <textarea id="trialReason" placeholder="Årsag (valgfri)" style="display:none;padding:8px;border-radius:6px;border:1px solid #ddd"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
-          <button id="modalSave" class="small-btn" style="background:#0ea5a4;color:#fff;border:none">Gem prøvetime</button>
+          <button id="modalSave" class="small-btn" style="background:#ff6600;color:#fff;border:none">Gem prøvetime</button>
           <button id="modalCancel" class="small-btn">Annuller</button>
         </div>
       </div>
@@ -132,9 +138,14 @@
     <div id="saveNotifier" aria-live="polite"></div>
 
   <script>
+    // server-provided flag: whether the current user is a manager (can set reply)
+    const IS_MANAGER = {{ is_manager|yesno:"true,false" }};
+
     (function(){
       // last user input timestamp used to decide whether to show "saved" notifier
   let lastUserInput = Date.now();
+    // ensure we only auto-scroll to today's date once on initial render
+    let initialScrollDone = false;
       function markUserTyped(){ lastUserInput = Date.now(); }
 
       // notifier helper
@@ -320,7 +331,7 @@
         return `${y}-${mm}-${dd}`;
       }
 
-      function createTrialRow(trial, container){
+  function createTrialRow(trial, container){
         const row = document.createElement('div');
         row.className = 'trial-row';
         const left = document.createElement('div');
@@ -358,8 +369,18 @@
         const dateISO = formatISO(dateObj.getFullYear(), dateObj.getMonth(), dayNum);
         const cell = document.createElement('div');
         cell.className = 'day-cell';
-        const num = document.createElement('div'); num.className='day-num'; num.textContent=dayNum;
-        cell.appendChild(num);
+        // expose the ISO date on the DOM so we can locate/scroll to "today"
+        cell.setAttribute('data-date', dateISO);
+            // show combined label like "1. Mandag" (single element)
+            try{
+              const wkName = dateObj.toLocaleDateString('da-DK', { weekday: 'long' });
+              const labelText = `${dayNum}. ${wkName.charAt(0).toUpperCase() + wkName.slice(1)}`;
+              const labelEl = document.createElement('div'); labelEl.className='day-num'; labelEl.textContent = labelText;
+              cell.appendChild(labelEl);
+            }catch(e){
+              // fallback: show just the day number
+              const num = document.createElement('div'); num.className='day-num'; num.textContent=dayNum; cell.appendChild(num);
+            }
 
   const trialsList = document.createElement('div'); trialsList.className='trials-list';
   const trialsHeading = document.createElement('div'); trialsHeading.className='field-heading'; trialsHeading.textContent = 'Prøvetimer';
@@ -442,27 +463,61 @@
         // Manager message with reply
         const mgrArea = document.createElement('div');
         const mgrText = document.createElement('textarea'); mgrText.className='manager-text'; mgrText.placeholder='Besked til leder';
-        const mgrReply = document.createElement('textarea'); mgrReply.className='manager-text'; mgrReply.placeholder='Leders svar (synligt for ledere)';
+        // reply container (hidden until there's a manager message saved or loaded)
+        const mgrReplyContainer = document.createElement('div'); mgrReplyContainer.className = 'mgr-reply-container';
+        const mgrReplyHeading = document.createElement('div'); mgrReplyHeading.className='field-heading'; mgrReplyHeading.textContent = IS_MANAGER ? 'Leders svar (synligt for ledere)' : 'Leders svar';
+        const mgrReply = document.createElement('textarea'); mgrReply.className='manager-text'; mgrReply.placeholder='Leders svar';
         // auto-resize manager textareas so they expand with content
-        attachAutoResize(mgrText);
-        attachAutoResize(mgrReply);
+  attachAutoResize(mgrText);
+  attachAutoResize(mgrReply);
         // autosave manager message and reply
         async function postManager(){
+          // If a manager has already replied, non-managers must not modify the manager-message.
+          if(!IS_MANAGER && mgrReply.value && mgrReply.value.trim() !== ''){
+            console.warn('Manager has replied — non-manager cannot update the manager message');
+            return;
+          }
           const payload = {date: dateISO, message: mgrText.value, reply: mgrReply.value};
           try{
             const res = await fetch('/accounts/api/manager_message/', {method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json','X-CSRFToken':csrftoken()}, credentials:'same-origin'});
             if(!res.ok){ const txt = await res.text(); console.error('manager save failed', res.status, txt); }
-            else { scheduleSavedNotification(); }
+            else {
+              // on success, show reply container if there is a manager message (or if server returned reply)
+              try{
+                const data = await res.json();
+                scheduleSavedNotification();
+                const hasMsg = (mgrText.value && mgrText.value.trim() !== '') || (data && data.manager_message && data.manager_message.message);
+                const hasReply = data && data.manager_message && data.manager_message.reply;
+                if(hasMsg || hasReply){ mgrReplyContainer.classList.add('visible'); }
+              }catch(e){ console.warn('manager save ok but json parse failed', e); scheduleSavedNotification(); if(mgrText.value && mgrText.value.trim() !== '') mgrReplyContainer.classList.add('visible'); }
+            }
           }catch(e){ console.error('manager post error', e); }
         }
   const debouncedManager = debounce(postManager, 600);
   mgrText.addEventListener('input', debouncedManager);
-  mgrReply.addEventListener('input', debouncedManager);
   mgrText.addEventListener('input', markUserTyped);
-  mgrReply.addEventListener('input', markUserTyped);
+  // Only allow managers to edit / autosave the reply field. Receptionists see it read-only.
+  if(IS_MANAGER){
+    mgrReply.addEventListener('input', debouncedManager);
+    mgrReply.addEventListener('input', markUserTyped);
+    mgrReply.readOnly = false;
+  } else {
+    mgrReply.readOnly = true;
+    mgrReply.setAttribute('aria-readonly','true');
+    mgrReply.style.background = '#f8fafc';
+  }
   const mgrHeading = document.createElement('div'); mgrHeading.className='field-heading'; mgrHeading.textContent = 'Besked til leder';
-  const mgrReplyHeading = document.createElement('div'); mgrReplyHeading.className='field-heading'; mgrReplyHeading.textContent = 'Leders svar (synligt for ledere)';
-  mgrArea.appendChild(mgrHeading); mgrArea.appendChild(mgrText); mgrArea.appendChild(mgrReplyHeading); mgrArea.appendChild(mgrReply);
+  // append reply heading + reply inside collapsible container
+  mgrReplyContainer.appendChild(mgrReplyHeading);
+  mgrReplyContainer.appendChild(mgrReply);
+  mgrArea.appendChild(mgrHeading); mgrArea.appendChild(mgrText); mgrArea.appendChild(mgrReplyContainer);
+
+  // if user clears the manager message locally, hide reply container until next successful save
+  mgrText.addEventListener('input', ()=>{
+    if(!mgrText.value || mgrText.value.trim() === ''){
+      mgrReplyContainer.classList.remove('visible');
+    }
+  });
         cell.appendChild(mgrArea);
 
         return {cell, trialsList, inTime, outTime, shiftText, mgrText, mgrReply};
@@ -495,6 +550,23 @@
           wrapper.mgrReply.value = data.manager_message.reply || '';
           autoResize(wrapper.mgrText);
           autoResize(wrapper.mgrReply);
+          // show reply container only if there is a manager message stored (or a stored reply)
+          if(wrapper.mgrText.value && wrapper.mgrText.value.trim() !== ''){
+            wrapper.mgrReply.parentElement.classList.add('visible');
+          } else if(wrapper.mgrReply.value && wrapper.mgrReply.value.trim() !== ''){
+            // if there is a reply but no message (edge case), still show reply
+            wrapper.mgrReply.parentElement.classList.add('visible');
+          } else {
+            wrapper.mgrReply.parentElement.classList.remove('visible');
+          }
+          // If there is a manager reply, make the manager-message read-only for non-managers
+          if(wrapper.mgrReply.value && wrapper.mgrReply.value.trim() !== '' && !IS_MANAGER){
+            wrapper.mgrText.readOnly = true;
+            wrapper.mgrText.style.background = '#f8fafc';
+          } else {
+            wrapper.mgrText.readOnly = false;
+            wrapper.mgrText.style.background = '';
+          }
         }
       }
 
@@ -523,6 +595,25 @@
         for(const w of wrappers){
           populateCellFor(w.date, w.day, w.wrapper);
         }
+
+        // Auto-scroll to today's cell on first load when the calendar is showing the current month
+        try{
+          if(!initialScrollDone && viewYear === now.getFullYear() && viewMonth === now.getMonth()){
+            const todayISO = formatISO(now.getFullYear(), now.getMonth(), now.getDate());
+            // small timeout to allow layout to settle
+            setTimeout(()=>{
+              const todayEl = calendarEl.querySelector(`[data-date="${todayISO}"]`);
+              if(todayEl){
+                // scroll the nearest scrollable ancestor (main.content) into view smoothly
+                try{ todayEl.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ todayEl.scrollIntoView(); }
+                // briefly highlight the cell
+                todayEl.classList.add('today-highlight');
+                setTimeout(()=> todayEl.classList.remove('today-highlight'), 2600);
+                initialScrollDone = true;
+              }
+            }, 120);
+          }
+        }catch(e){ console.warn('auto-scroll to today failed', e); }
       }
 
       document.getElementById('prevMonth').addEventListener('click', function(){ viewMonth -=1; if(viewMonth<0){ viewMonth=11; viewYear-=1; } loadMonth(viewYear, viewMonth); });
