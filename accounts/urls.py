@@ -8,6 +8,8 @@ urlpatterns = [
     path('login/', auth_views.LoginView.as_view(template_name='accounts/login.html'), name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('post-login-redirect/', views.post_login_redirect, name='post_login_redirect'),
+    path('swagger/', views.swagger_ui, name='swagger_ui'),
+    path('swagger/openapi.yaml', views.swagger_spec, name='swagger_spec'),
 ]
 
 # separate small urlconf for dashboard to keep project urls tidy

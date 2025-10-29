@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>API - Swagger UI</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.18.0/swagger-ui.css" integrity="sha512-2bL3u+f0e7j0W6Qk8hG8nQjX3JpN4T7n2zFvX5r3qT3wO1u8a1V0kY6zYq4kJ+6J0Zq1R3w5c1k8NzF/0qg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    body { margin:0; background:#fafafa; }
+    #swagger-ui { width:100%; height:100vh; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.18.0/swagger-ui-bundle.min.js" integrity="sha512-UbX0z5V2c1Q6Fz8pZ1XqL1a5s0qY9M0zV1r6s8Q1a2V3b4C5d6E7f8G9h0I1J2K3L4M5N6O7P8Q9R0S1T2U3V==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    // Initialize Swagger UI and point it to the spec endpoint served by Django
+    window.onload = function() {
+      const ui = SwaggerUIBundle({
+        url: '{% url "accounts:swagger_spec" %}',
+        dom_id: '#swagger-ui',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+        ],
+        layout: 'BaseLayout',
+        deepLinking: true,
+      })
+    }
+  </script>
+</body>
+</html>

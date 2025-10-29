@@ -12,6 +12,9 @@ from .models import Trial, CleaningRecord, ShiftMessage, ManagerMessage
 from .models import CleaningTask
 import json
 from datetime import datetime
+import os
+from django.conf import settings
+from django.http import HttpResponse
 
 
 def user_has_dashboard_role(user):
@@ -103,6 +106,28 @@ def post_login_redirect(request):
 def cleaning_view(request):
     """Placeholder page for Rengøring accessible to all authenticated users."""
     return render(request, 'accounts/cleaning.html', {})
+
+
+@login_required
+def swagger_spec(request):
+    """Serve the project-level openapi.yaml so the Swagger UI can load it.
+
+    The file is expected at BASE_DIR/openapi.yaml. Returns 404 if missing.
+    """
+    spec_path = os.path.join(settings.BASE_DIR, 'openapi.yaml')
+    try:
+        with open(spec_path, 'rb') as fh:
+            return HttpResponse(fh.read(), content_type='application/x-yaml')
+    except FileNotFoundError:
+        return HttpResponse('openapi.yaml not found', status=404)
+
+
+@login_required
+def swagger_ui(request):
+    """Render a small template that mounts Swagger UI (from CDN) and points it
+    at the `swagger_spec` URL.
+    """
+    return render(request, 'accounts/swagger_ui.html', {})
 
 
 def _is_manager(user):

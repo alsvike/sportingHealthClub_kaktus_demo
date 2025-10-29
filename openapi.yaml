@@ -1,0 +1,430 @@
+openapi: 3.0.3
+info:
+  title: Sporting Health Club - Staff API
+  version: '1.0.0'
+  description: |
+    API-specifikation for staff-funktioner (Overlevering & Rengøring).
+    Filen indeholder endpoints for rengøringsopgaver, daglige rengøringsposter,
+    vagtbeskeder, lederbeskeder og prøvetimer. Eksempler er inkluderet for hver
+    operation.
+
+servers:
+  - url: http://localhost:8000
+    description: Lokal udviklingsserver
+
+paths:
+  /accounts/api/cleaning_tasks/:
+    get:
+      summary: Hent rengøringsopgaver for en given ugedag
+      parameters:
+        - in: query
+          name: weekday
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 6
+          required: true
+          description: "Ugedag (0=Mandag .. 6=Søndag)"
+      responses:
+        '200':
+          description: Liste af opgaver
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CleaningTask'
+              examples:
+                example:
+                  value:
+                    tasks:
+                      - id: 12
+                        weekday: 0
+                        time: '06:45'
+                        area: 'morning'
+                        title: 'Sørg der er pænt og ryddeligt'
+                        details: 'Omklædningen: ...'
+                        status: 'Pending'
+    post:
+      summary: Opret en rengøringsopgave
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CleaningTaskCreate'
+            example:
+              weekday: 0
+              time: '06:45'
+              area: 'morning'
+              title: 'Sørg der er pænt og ryddeligt'
+              details: 'Omklædningen...'
+              status: 'Pending'
+      responses:
+        '201':
+          description: Opgave oprettet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleaningTask'
+
+  /accounts/api/cleaning_tasks/{id}/:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    patch:
+      summary: Opdater delvist en rengøringsopgave (fx status)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [Pending, Done, NotUsed, NotDone]
+            example:
+              status: 'Done'
+      responses:
+        '200':
+          description: Opgave opdateret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleaningTask'
+    delete:
+      summary: Slet en rengøringsopgave
+      responses:
+        '204':
+          description: Slettet
+
+  /accounts/api/cleaning/:
+    post:
+      summary: Gem rengøringsankomst/afgang for en dato
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                arrived:
+                  type: string
+                left:
+                  type: string
+            example:
+              date: '2025-10-29'
+              arrived: '06:45'
+              left: '15:00'
+      responses:
+        '200':
+          description: Rengøringspost gemt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleaningRecord'
+
+  /accounts/api/shift_message/:
+    post:
+      summary: Gem vagtbesked for en dato
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                message:
+                  type: string
+            example:
+              date: '2025-10-29'
+              message: 'Der kommer et hold kl. 10:00.'
+      responses:
+        '200':
+          description: Vagtbesked gemt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftMessage'
+
+  /accounts/api/manager_message/:
+    post:
+      summary: Gem lederbesked og evt. svar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                message:
+                  type: string
+                reply:
+                  type: string
+            example:
+              date: '2025-10-29'
+              message: 'Husk at tjekke låsen'
+              reply: 'Gennemført'
+      responses:
+        '200':
+          description: Manager message gemt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagerMessage'
+
+  /accounts/api/trials/:
+    get:
+      summary: Hent prøvetimer for en dato (brug query ?date=YYYY-MM-DD)
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          required: true
+          description: Dato i ISO-format
+      responses:
+        '200':
+          description: Liste af prøvetimer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trials:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Trial'
+    post:
+      summary: Opret prøvetime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialCreate'
+            example:
+              name: 'Yoga Intro'
+              trial_type: 'Class'
+              date: '2025-10-30'
+              status: 'Pending'
+      responses:
+        '201':
+          description: Prøve oprettet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trial:
+                    $ref: '#/components/schemas/Trial'
+
+  /accounts/api/trials/{id}/:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    patch:
+      summary: Opdater prøvetime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialCreate'
+            example:
+              name: 'Yoga Intro'
+              status: 'SignedUp'
+      responses:
+        '200':
+          description: Opdateret
+    delete:
+      summary: Slet prøvetime
+      responses:
+        '204':
+          description: Slettet
+
+  /accounts/api/day/:
+    get:
+      summary: Hent aggregated day data (trials, cleaning, shift_message, manager_message)
+      parameters:
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Dagdata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  trials:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Trial'
+                  cleaning:
+                    $ref: '#/components/schemas/CleaningRecord'
+                  shift_message:
+                    $ref: '#/components/schemas/ShiftMessage'
+                  manager_message:
+                    $ref: '#/components/schemas/ManagerMessage'
+              examples:
+                example:
+                  value:
+                    date: '2025-10-29'
+                    trials: []
+                    cleaning:
+                      date: '2025-10-29'
+                      arrived: '06:45'
+                      left: '15:00'
+                    shift_message:
+                      date: '2025-10-29'
+                      message: 'Husk at fylde op'
+                    manager_message:
+                      date: '2025-10-29'
+                      message: 'Tjek lås'
+                      reply: 'OK'
+
+components:
+  schemas:
+    CleaningTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        weekday:
+          type: integer
+        time:
+          type: string
+        area:
+          type: string
+        title:
+          type: string
+        details:
+          type: string
+        status:
+          type: string
+          enum: [Pending, Done, NotUsed, NotDone]
+
+    CleaningTaskCreate:
+      type: object
+      required: [weekday, title]
+      properties:
+        weekday:
+          type: integer
+        time:
+          type: string
+        area:
+          type: string
+        title:
+          type: string
+        details:
+          type: string
+        status:
+          type: string
+
+    CleaningRecord:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        arrived:
+          type: string
+        left:
+          type: string
+
+    ShiftMessage:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        message:
+          type: string
+
+    ManagerMessage:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        message:
+          type: string
+        reply:
+          type: string
+
+    Trial:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        trial_type:
+          type: string
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+        created_by:
+          type: string
+        status:
+          type: string
+        reason:
+          type: string
+
+    TrialCreate:
+      type: object
+      required: [name, trial_type, date]
+      properties:
+        name:
+          type: string
+        trial_type:
+          type: string
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+        status:
+          type: string
+        reason:
+          type: string
+
+security: []
+
+tags:
+  - name: cleaning
+    description: Rengøringsopgaver og poster
+  - name: trials
+    description: Prøvetimer
+  - name: messages
+    description: Vagt- og lederbeskeder
