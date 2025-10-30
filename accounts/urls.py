@@ -27,6 +27,9 @@ api_urlpatterns = [
     path('api/cleaning_tasks/<int:pk>/', views.api_modify_cleaning_task, name='api_modify_cleaning_task'),
     path('api/shift_message/', views.api_shift_message, name='api_shift_message'),
     path('api/manager_message/', views.api_manager_message, name='api_manager_message'),
+    # PT Leads API
+    path('api/pt_leads/', views.api_pt_leads, name='api_pt_leads'),
+    path('api/pt_leads/<int:pk>/', views.api_modify_pt_lead, name='api_modify_pt_lead'),
 ]
 
 # expose API endpoints on the same `accounts/` prefix

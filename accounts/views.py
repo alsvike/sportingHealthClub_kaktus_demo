@@ -10,11 +10,15 @@ from django.contrib.auth.decorators import user_passes_test
 
 from .models import Trial, CleaningRecord, ShiftMessage, ManagerMessage
 from .models import CleaningTask
+from .models import PTLead
 import json
 from datetime import datetime
 import os
 from django.conf import settings
 from django.http import HttpResponse
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 def user_has_dashboard_role(user):
@@ -136,6 +140,31 @@ def _is_manager(user):
     if user.is_superuser:
         return True
     return user.groups.filter(name__in=['Manager','Owner','Admin','Administrator']).exists()
+
+
+def user_has_pt_access(user):
+    """Return True if user is allowed to access the PT Leads page.
+
+    Allowed groups: Owner, Manager, Receptionist, Admin, Administrator. Superusers allowed.
+    """
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    allowed = ['Owner', 'Manager', 'Receptionist', 'Admin', 'Administrator']
+    return user.groups.filter(name__in=allowed).exists()
+
+
+@login_required
+def pt_leads_view(request):
+    """Simple placeholder page for PT Leads restricted to staff roles.
+
+    Renders a minimal placeholder so the route can be tested in the UI.
+    """
+    if not user_has_pt_access(request.user):
+        return HttpResponseForbidden(render(request, 'accounts/403.html', {}))
+
+    return render(request, 'accounts/pt_leads.html', {})
 
 
 @login_required
@@ -335,6 +364,102 @@ def api_cleaning_update(request):
     obj.left = parse_time(left)
     obj.save()
     return JsonResponse({'cleaning': obj.to_dict()})
+
+
+@require_http_methods(['GET','POST'])
+@login_required
+def api_pt_leads(request):
+    """GET: list PT leads. POST: create a new PT lead.
+    Access requires staff role (owner/manager/receptionist/admin).
+    """
+    if not user_has_pt_access(request.user):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+
+    if request.method == 'GET':
+        qs = PTLead.objects.all().order_by('-created_at')
+        leads = [p.to_dict() for p in qs]
+        return JsonResponse({'leads': leads})
+
+    # POST -> create
+    try:
+        payload = json.loads(request.body.decode())
+    except Exception:
+        return HttpResponseBadRequest('Invalid JSON')
+
+    name = payload.get('name','').strip()
+    note = payload.get('note','').strip()
+    phone = payload.get('phone','').strip()
+    email = payload.get('email','').strip()
+    contacted_at = payload.get('contacted_at')
+    receptionist_id = payload.get('receptionist_id')
+
+    receptionist = None
+    if receptionist_id:
+        try:
+            receptionist = User.objects.get(pk=int(receptionist_id))
+        except Exception:
+            receptionist = None
+
+    # parse contacted_at if present
+    contacted_dt = None
+    from django.utils.dateparse import parse_datetime
+    if contacted_at:
+        contacted_dt = parse_datetime(contacted_at)
+
+    obj = PTLead.objects.create(
+        name=name,
+        note=note,
+        phone=phone,
+        email=email,
+        receptionist=receptionist,
+        contacted_at=contacted_dt,
+        created_by=request.user,
+    )
+    return JsonResponse({'lead': obj.to_dict()}, status=201)
+
+
+@require_http_methods(['PATCH','PUT','DELETE'])
+@login_required
+def api_modify_pt_lead(request, pk):
+    if not user_has_pt_access(request.user):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    try:
+        lead = PTLead.objects.get(pk=pk)
+    except PTLead.DoesNotExist:
+        return JsonResponse({'error': 'not found'}, status=404)
+
+    if request.method in ('PATCH','PUT'):
+        try:
+            payload = json.loads(request.body.decode())
+        except Exception:
+            return HttpResponseBadRequest('Invalid JSON')
+
+        # allow partial updates
+        if 'name' in payload:
+            lead.name = payload.get('name') or ''
+        if 'note' in payload:
+            lead.note = payload.get('note') or ''
+        if 'phone' in payload:
+            lead.phone = payload.get('phone') or ''
+        if 'email' in payload:
+            lead.email = payload.get('email') or ''
+        if 'receptionist_id' in payload:
+            rid = payload.get('receptionist_id')
+            try:
+                lead.receptionist = User.objects.get(pk=int(rid)) if rid else None
+            except Exception:
+                lead.receptionist = None
+        if 'contacted_at' in payload:
+            from django.utils.dateparse import parse_datetime
+            val = payload.get('contacted_at')
+            lead.contacted_at = parse_datetime(val) if val else None
+
+        lead.save()
+        return JsonResponse({'lead': lead.to_dict()})
+
+    if request.method == 'DELETE':
+        lead.delete()
+        return JsonResponse({'deleted': True})
 
 
 @require_http_methods(['POST'])

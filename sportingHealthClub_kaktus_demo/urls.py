@@ -17,4 +17,6 @@ urlpatterns = [
     # Expose Swagger UI at top-level /swagger
     path('swagger/', accounts_views.swagger_ui, name='swagger_ui_root'),
     path('swagger/openapi.yaml', accounts_views.swagger_spec, name='swagger_spec_root'),
+    # PT Leads page
+    path('pt-leads/', accounts_views.pt_leads_view, name='pt_leads'),
 ]

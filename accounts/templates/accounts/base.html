@@ -100,6 +100,11 @@
             {# Rengøring: placeholder page available to any authenticated user/group #}
             <a href="{% url 'cleaning' %}">Rengøring</a>
 
+            {# PT Leads: visible to Owner, Manager, Receptionist, Admin/Administrator #}
+            {% if can_view_pt_leads %}
+              <a href="{% url 'pt_leads' %}">PT Leads</a>
+            {% endif %}
+
         {# Additional links: example placeholder — add real links here and wrap with role flags (is_admin, etc.) #}
           {% else %}
             {# Show minimal navigation for anonymous users, if desired #}

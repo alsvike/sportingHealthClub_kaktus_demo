@@ -123,3 +123,37 @@ class CleaningTask(models.Model):
 
     def __str__(self):
         return f"[{self.get_weekday_display() if hasattr(self,'get_weekday_display') else self.weekday}] {self.title} ({self.time})"
+
+
+class PTLead(models.Model):
+    """Persistent PT lead collected by receptionists.
+
+    Fields mirror the UI: name, note, phone, email, receptionist (FK), contacted_at.
+    """
+    name = models.CharField(max_length=255, blank=True)
+    note = models.TextField(blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    email = models.CharField(max_length=254, blank=True)
+    receptionist = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='pt_leads')
+    contacted_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_pt_leads')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'note': self.note,
+            'phone': self.phone,
+            'email': self.email,
+            'receptionist': self.receptionist.username if self.receptionist else None,
+            'receptionist_id': self.receptionist.id if self.receptionist else None,
+            'contacted_at': self.contacted_at.isoformat() if self.contacted_at else None,
+            'created_by': self.created_by.username if self.created_by else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __str__(self):
+        return f"PTLead {self.id}: {self.name or '(no name)'}"
