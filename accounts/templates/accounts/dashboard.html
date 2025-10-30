@@ -7,12 +7,12 @@
   <p>Dette dashboard viser en oversigt over tilmeldte prøver og konverteringsmålinger.</p>
 
   <div class="card" style="margin-top:12px;max-width:620px">
-  <h3 style="margin-bottom:8px">Oversigt over prøver (eksempeldata)</h3>
+  <h3 style="margin-bottom:8px">Oversigt over prøvetimer (eksempeldata)</h3>
     <div class="chart-wrap" style="width:100%;max-width:520px;height:220px">
       <canvas id="trialsChart" style="width:100%;height:100%"></canvas>
     </div>
     <div style="margin-top:10px;display:flex;gap:18px;font-size:0.95rem;color:var(--text-dark)">
-      <div><strong>I alt tilmeldt:</strong> {{ registered_sum }}</div>
+      <div><strong>I alt registreret:</strong> {{ registered_sum }}</div>
       <div><strong>I alt konverteret:</strong> {{ converted_sum }}</div>
     </div>
   </div>
@@ -24,6 +24,9 @@
       const converted = {{ converted|safe }};
       const notConverted = {{ not_converted|safe }};
 
+      // compute registered per-label as sum of converted + notConverted
+      const registered = labels.map((_,i)=>((converted[i]||0) + (notConverted[i]||0)));
+
       const ctx = document.getElementById('trialsChart').getContext('2d');
       new Chart(ctx, {
         type: 'bar',
@@ -31,16 +34,25 @@
           labels: labels,
           datasets: [
             {
-              label: 'Konverteret',
-              data: converted,
-              backgroundColor: 'rgba(34,197,94,0.95)',
+              label: 'Registreret',
+              data: registered,
+              backgroundColor: 'rgba(156,163,175,0.9)', // gray
               borderRadius: 4,
+              stack: 'registered'
             },
             {
               label: 'Ikke konverteret',
               data: notConverted,
-              backgroundColor: 'rgba(239,68,68,0.95)',
+              backgroundColor: 'rgba(239,68,68,0.95)', // red
               borderRadius: 4,
+              stack: 'parts'
+            },
+            {
+              label: 'Konverteret',
+              data: converted,
+              backgroundColor: 'rgba(34,197,94,0.95)', // green
+              borderRadius: 4,
+              stack: 'parts'
             }
           ]
         },
@@ -51,6 +63,7 @@
             legend: { position: 'top', labels: {boxWidth: 12, padding: 8, font: {size:12} } }
           },
           scales: {
+            // stacked:true will stack datasets that share the same `stack` id
             x: { stacked: true, grid: {display:false}, ticks: {maxRotation:0, autoSkip: true, maxTicksLimit: 7} },
             y: { stacked: true, beginAtZero: true, grid: {color: 'rgba(15,23,36,0.04)'}, ticks: {stepSize: 5} }
           },
