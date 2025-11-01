@@ -6,11 +6,12 @@
   <h1>Dashboard</h1>
   <p>Dette dashboard viser en oversigt over tilmeldte prøver og konverteringsmålinger.</p>
 
-  <div class="card" style="margin-top:12px;max-width:620px">
-  <h3 style="margin-bottom:8px">Oversigt over prøvetimer (eksempeldata)</h3>
-    <div class="chart-wrap" style="width:100%;max-width:720px;">
+  <div class="card" style="margin-top:12px;max-width:900px">
+  <h3 style="margin-bottom:8px">Oversigt over prøvetimer og konvertering</h3>
+    <div class="chart-wrap" style="width:100%;max-width:860px;">
       <!-- Tabs for months -->
-      <div id="monthTabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:nowrap">
+        <div id="monthTabs" style="display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto">
         <button data-month="0" class="month-tab btn" style="background:transparent;border:1px solid #e6eef6;padding:6px 8px;border-radius:6px;cursor:pointer">Jan</button>
         <button data-month="1" class="month-tab btn" style="background:transparent;border:1px solid #e6eef6;padding:6px 8px;border-radius:6px;cursor:pointer">Feb</button>
         <button data-month="2" class="month-tab btn" style="background:transparent;border:1px solid #e6eef6;padding:6px 8px;border-radius:6px;cursor:pointer">Mar</button>
@@ -23,6 +24,14 @@
         <button data-month="9" class="month-tab btn" style="background:transparent;border:1px solid #e6eef6;padding:6px 8px;border-radius:6px;cursor:pointer">Okt</button>
         <button data-month="10" class="month-tab btn" style="background:transparent;border:1px solid #e6eef6;padding:6px 8px;border-radius:6px;cursor:pointer">Nov</button>
         <button data-month="11" class="month-tab btn" style="background:transparent;border:1px solid #e6eef6;padding:6px 8px;border-radius:6px;cursor:pointer">Dec</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+          <div style="font-size:0.9rem;color:var(--muted);margin-right:6px;white-space:nowrap">Vis som:</div>
+          <!-- unified pill-style for granularity buttons; active state handled in JS -->
+          <button id="viewDay" class="small-btn" style="padding:6px 8px;border-radius:6px;cursor:pointer;border:1px solid #e6eef6;background:transparent;">Dag</button>
+          <button id="viewWeek" class="small-btn" style="padding:6px 8px;border-radius:6px;cursor:pointer;border:1px solid #e6eef6;background:transparent;">Uge</button>
+          <button id="viewMonth" class="small-btn" style="padding:6px 8px;border-radius:6px;cursor:pointer;border:1px solid #e6eef6;background:transparent;">Måned</button>
+        </div>
       </div>
 
       <!-- Panels: one canvas per month. Height controlled per panel. -->
@@ -76,8 +85,8 @@
         </div>
     </div>
     <div style="margin-top:10px;display:flex;gap:18px;font-size:0.95rem;color:var(--text-dark)">
-      <div><strong>I alt registreret:</strong> {{ registered_sum }}</div>
-      <div><strong>I alt konverteret:</strong> {{ converted_sum }}</div>
+      <div><strong>I alt registreret:</strong> <span id="registeredTotal">{{ registered_sum }}</span></div>
+      <div><strong>I alt konverteret:</strong> <span id="convertedTotal">{{ converted_sum }}</span></div>
     </div>
   </div>
 
@@ -109,59 +118,215 @@
         months[monthIndex].registered.push(registered[i] || 0);
       });
 
-      // helper to create chart for given month index
-      function createMonthChart(monthIdx){
+      // helper to fetch day data for a given ISO date (reuses same API as Overlevering)
+      async function fetchDayDataISO(dateISO){
+        try{
+          const res = await fetch(`/accounts/api/day/?date=${dateISO}`, {credentials:'same-origin'});
+          if(!res.ok) return null;
+          return await res.json();
+        }catch(e){ console.error('fetchDayDataISO error', e); return null; }
+      }
+
+      // helper to create chart for given month index — this aggregates trials across all days in the month
+      async function createMonthChart(monthIdx){
         const panel = document.querySelector(`.month-panel[data-month-panel="${monthIdx}"]`);
         if(!panel) return;
         const canvas = document.getElementById(`trialsChart-${monthIdx}`);
-        const mts = months[monthIdx];
-        if(!mts.labels.length){
+        // compute year/month for this view (use current year)
+        const year = new Date().getFullYear();
+        const daysInMonth = new Date(year, monthIdx+1, 0).getDate();
+
+        // fetch all days in parallel
+        const dayPromises = [];
+        for(let d=1; d<=daysInMonth; d++){
+          const iso = `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          dayPromises.push(fetchDayDataISO(iso));
+        }
+        const dayResults = await Promise.all(dayPromises);
+
+        // aggregate counts and also prepare per-day arrays for day/week views
+        let registeredCount = 0;
+        let signedUp = 0; // Tilmeldt
+        let notSignedUp = 0; // Ikke tilmeldt (Pending)
+        let didNotShow = 0; // Mødte ikke op
+
+        const perDay = Array.from({length: daysInMonth}, ()=>({registered:0, signedUp:0, notSignedUp:0, didNotShow:0}));
+
+        dayResults.forEach((day, idx) => {
+          if(!day || !Array.isArray(day.trials)) return;
+          const dIndex = idx; // corresponds to day-1
+          registeredCount += day.trials.length;
+          day.trials.forEach(t => {
+            // normalize status for matching
+            const raw = (t.status || '');
+            const s = String(raw).toLowerCase().replace(/\s+/g,'');
+
+            // increment registered count for every trial
+            perDay[dIndex].registered += 1;
+
+            // explicit mappings — prefer exact/clear tokens from the server
+            // - signed up (konverteret)
+            if(s === 'signedup' || s.includes('tilmeld') || s === 'signed' || s === 'signed_up' || s === 'signedup') {
+              signedUp += 1;
+              perDay[dIndex].signedUp += 1;
+            }
+            // - did not show / no-show
+            else if(s.includes('mød') || s.includes('didnot') || s.includes('did_not') || s.includes('no-show')) {
+              didNotShow += 1;
+              perDay[dIndex].didNotShow += 1;
+            }
+            // - explicitly not signed up (server token like 'NotSignedUp')
+            else if(s.includes('notsign') || s.includes('nottilmeld') || s.includes('ikke_tilmeldt') || s.includes('not_signed')) {
+              notSignedUp += 1;
+              perDay[dIndex].notSignedUp += 1;
+            }
+            // - explicit 'pending' or empty statuses are treated as registered only
+            else if(s === 'pending' || s === ''){
+              // registered only, do nothing else
+            }
+            // else: unknown/other statuses -> treat as registered only (do not increment 'ikke tilmeldt')
+          });
+        });
+
+        // update totals in UI (registeredTotal and convertedTotal — converted maps to signedUp here)
+        try{
+          const regEl = document.getElementById('registeredTotal');
+          const convEl = document.getElementById('convertedTotal');
+          if(regEl) regEl.textContent = String(registeredCount);
+          if(convEl) convEl.textContent = String(signedUp);
+        }catch(e){/* ignore */}
+
+        // if no data, show empty message
+        if(registeredCount === 0){
           panel.querySelector('.month-empty').style.display = 'block';
           canvas.style.display = 'none';
           return;
         }
         panel.querySelector('.month-empty').style.display = 'none';
         canvas.style.display = '';
+
         const ctx = canvas.getContext('2d');
-        // destroy existing chart instance if present
         if(canvas._chartInstance){ try{ canvas._chartInstance.destroy(); }catch(e){} }
-        const chart = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: mts.labels,
-            datasets: [
-              { label: 'Registreret', data: mts.registered, backgroundColor: 'rgba(156,163,175,0.9)', borderRadius:4, stack:'registered' },
-              { label: 'Ikke konverteret', data: mts.notConverted, backgroundColor: 'rgba(239,68,68,0.95)', borderRadius:4, stack:'parts' },
-              { label: 'Konverteret', data: mts.converted, backgroundColor: 'rgba(34,197,94,0.95)', borderRadius:4, stack:'parts' }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'top', labels: {boxWidth:12, padding:8, font:{size:12}}}},
-            scales: { x: { stacked:true, grid:{display:false}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:7} }, y: { stacked:true, beginAtZero:true, grid:{color:'rgba(15,23,36,0.04)'}, ticks:{stepSize:5} } },
-            elements: { point:{radius:0} }
+
+        if(GRANULARITY === 'month'){
+          // prepare chart data (4 categories)
+          const labelsStatus = ['Registreret','Tilmeldt','Ikke tilmeldt','Mødte ikke op'];
+          const dataVals = [registeredCount, signedUp, notSignedUp, didNotShow];
+          const colors = ['rgba(156,163,175,0.9)','rgba(34,197,94,0.95)','rgba(249,115,22,0.95)','rgba(239,68,68,0.95)'];
+          const chart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: labelsStatus, datasets: [{ label: 'Prøvetimer', data: dataVals, backgroundColor: colors, borderRadius:6 }] },
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}}, y:{beginAtZero:true,grid:{color:'rgba(15,23,36,0.04)'}} } }
+          });
+          canvas._chartInstance = chart;
+          return;
+        }
+
+        // DAY or WEEK views: build labels and datasets
+        if(GRANULARITY === 'day'){
+          const labelsDays = [];
+          const regData = [];
+          const suData = [];
+          const nsData = [];
+          const dnsData = [];
+          for(let i=0;i<daysInMonth;i++){
+            labelsDays.push(String(i+1));
+            regData.push(perDay[i].registered || 0);
+            suData.push(perDay[i].signedUp || 0);
+            nsData.push(perDay[i].notSignedUp || 0);
+            dnsData.push(perDay[i].didNotShow || 0);
           }
-        });
-        canvas._chartInstance = chart;
+          const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: labelsDays,
+              datasets: [
+                { label: 'Registreret', data: regData, backgroundColor: 'rgba(156,163,175,0.9)', borderRadius:4 },
+                { label: 'Tilmeldt', data: suData, backgroundColor: 'rgba(34,197,94,0.95)', borderRadius:4, stack:'parts' },
+                { label: 'Ikke tilmeldt', data: nsData, backgroundColor: 'rgba(249,115,22,0.95)', borderRadius:4, stack:'parts' },
+                { label: 'Mødte ikke op', data: dnsData, backgroundColor: 'rgba(239,68,68,0.95)', borderRadius:4, stack:'parts' }
+              ]
+            },
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{ x:{ stacked:false }, y:{ beginAtZero:true } } }
+          });
+          canvas._chartInstance = chart;
+          return;
+        }
+
+        if(GRANULARITY === 'week'){
+          // group days into week buckets (1..n)
+          const weeksMap = {};
+          for(let i=0;i<daysInMonth;i++){
+            const dayNum = i+1;
+            const weekIdx = Math.ceil(dayNum/7); // simple week grouping
+            if(!weeksMap[weekIdx]) weeksMap[weekIdx] = {registered:0, signedUp:0, notSignedUp:0, didNotShow:0};
+            weeksMap[weekIdx].registered += perDay[i].registered || 0;
+            weeksMap[weekIdx].signedUp += perDay[i].signedUp || 0;
+            weeksMap[weekIdx].notSignedUp += perDay[i].notSignedUp || 0;
+            weeksMap[weekIdx].didNotShow += perDay[i].didNotShow || 0;
+          }
+          const labelsWeeks = Object.keys(weeksMap).map(k=> 'Uge '+k);
+          const regData = Object.values(weeksMap).map(w=>w.registered);
+          const suData = Object.values(weeksMap).map(w=>w.signedUp);
+          const nsData = Object.values(weeksMap).map(w=>w.notSignedUp);
+          const dnsData = Object.values(weeksMap).map(w=>w.didNotShow);
+          const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: labelsWeeks,
+              datasets: [
+                { label: 'Registreret', data: regData, backgroundColor: 'rgba(156,163,175,0.9)', borderRadius:4 },
+                { label: 'Tilmeldt', data: suData, backgroundColor: 'rgba(34,197,94,0.95)', borderRadius:4, stack:'parts' },
+                { label: 'Ikke tilmeldt', data: nsData, backgroundColor: 'rgba(249,115,22,0.95)', borderRadius:4, stack:'parts' },
+                { label: 'Mødte ikke op', data: dnsData, backgroundColor: 'rgba(239,68,68,0.95)', borderRadius:4, stack:'parts' }
+              ]
+            },
+            options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{ x:{ stacked:false }, y:{ beginAtZero:true } } }
+          });
+          canvas._chartInstance = chart;
+          return;
+        }
       }
 
-      // init tabs
-      const tabs = Array.from(document.querySelectorAll('#monthTabs .month-tab'));
-      const panels = Array.from(document.querySelectorAll('.month-panel'));
+  // init tabs
+  const tabs = Array.from(document.querySelectorAll('#monthTabs .month-tab'));
+  const panels = Array.from(document.querySelectorAll('.month-panel'));
+  // granularity controls
+  const viewDayBtn = document.getElementById('viewDay');
+  const viewWeekBtn = document.getElementById('viewWeek');
+  const viewMonthBtn = document.getElementById('viewMonth');
+  let GRANULARITY = 'month'; // 'day' | 'week' | 'month'
+  function setGranularity(g){
+    GRANULARITY = g;
+    // normalize all buttons to inactive appearance
+    [viewDayBtn, viewWeekBtn, viewMonthBtn].forEach(b=>{
+      b.style.background = 'transparent';
+      b.style.color = '';
+      b.style.border = '1px solid #e6eef6';
+    });
+    // active button -> orange pill with white text, no border
+    const active = g === 'day' ? viewDayBtn : (g === 'week' ? viewWeekBtn : viewMonthBtn);
+    if(active){ active.style.background = '#ff6600'; active.style.color = '#fff'; active.style.border = 'none'; }
+  }
+  viewDayBtn.addEventListener('click', ()=>{ setGranularity('day'); setActiveMonth(activeMonthIndex); });
+  viewWeekBtn.addEventListener('click', ()=>{ setGranularity('week'); setActiveMonth(activeMonthIndex); });
+  viewMonthBtn.addEventListener('click', ()=>{ setGranularity('month'); setActiveMonth(activeMonthIndex); });
+      let activeMonthIndex = 0;
       function setActiveMonth(idx){
         tabs.forEach(t=> t.style.background='transparent');
         panels.forEach(p=> p.style.display='none');
         const activeTab = tabs.find(t=>Number(t.dataset.month)===idx);
         if(activeTab) activeTab.style.background='#ffedd5';
         const panel = document.querySelector(`.month-panel[data-month-panel="${idx}"]`);
-        if(panel) { panel.style.display='block'; createMonthChart(idx); }
+        if(panel) { panel.style.display='block'; activeMonthIndex = idx; createMonthChart(idx); }
       }
 
       tabs.forEach(t=> t.addEventListener('click', ()=> setActiveMonth(Number(t.dataset.month))));
       // default to current month if possible
       const now = new Date();
       const defaultMonth = (now && typeof now.getMonth === 'function') ? now.getMonth() : 0;
+      // ensure granularity UI matches initial state
+      setGranularity('month');
       setActiveMonth(defaultMonth);
     })();
   </script>

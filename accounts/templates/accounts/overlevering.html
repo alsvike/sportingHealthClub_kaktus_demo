@@ -49,6 +49,7 @@
   .trial-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px;border-radius:6px;background:#ffffff;border:1px solid rgba(2,6,23,0.04)}
   .trial-row.signedup{background:#ecfdf5;border-color:#86efac}
   .trial-row.didnotsignup{background:#fff1f2;border-color:#fca5a5}
+  .trial-row.notSignedUp{background:#fffbeb;border-color:#fef3c7}
   .trial-meta em{font-style:normal;color:inherit;opacity:0.9}
     .trial-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
     .trial-meta{font-size:0.8rem;color:var(--muted)}
@@ -120,12 +121,13 @@
         </select>
         <div class="field-heading">Status</div>
         <select id="trialStatus" style="padding:8px;border-radius:6px;border:1px solid #ddd">
-          <option value="Pending">Afventer</option>
+          <option value="Pending">Registreret</option>
           <option value="SignedUp">Tilmeldt</option>
+          <option value="NotSignedUp">Ikke tilmeldt</option>
           <option value="DidNotSignup">Mødte ikke op</option>
         </select>
-        <div class="field-heading" id="reasonHeading" style="display:none">Årsag (hvis ikke tilmeldt)</div>
-        <textarea id="trialReason" placeholder="Årsag (valgfri)" style="display:none;padding:8px;border-radius:6px;border:1px solid #ddd"></textarea>
+  <div class="field-heading" id="reasonHeading" style="display:none">Årsag</div>
+  <textarea id="trialReason" class="manager-text" placeholder="Årsag (valgfri)" style="display:none;padding:8px;border-radius:6px;border:1px solid #ddd"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
           <button id="modalSave" class="small-btn" style="background:#ff6600;color:#fff;border:none">Gem prøvetime</button>
           <button id="modalCancel" class="small-btn">Annuller</button>
@@ -210,7 +212,9 @@
           modalType.value = edit.trial_type;
           modalStatus.value = edit.status || 'Pending';
           modalReason.value = edit.reason || '';
-          modalReason.style.display = (modalStatus.value === 'DidNotSignup') ? 'block' : 'none';
+          modalReason.style.display = (modalStatus.value === 'DidNotSignup' || modalStatus.value === 'NotSignedUp') ? 'block' : 'none';
+          if(modalReasonHeading) modalReasonHeading.style.display = (modalStatus.value === 'NotSignedUp') ? 'block' : 'none';
+          if(modalReason.style.display === 'block'){ try{ autoResize(modalReason); }catch(e){} }
         } else {
           modalTitle.textContent = 'Tilføj prøvetime';
           modalName.value = '';
@@ -226,9 +230,12 @@
   attachAutoResize(modalReason);
 
       modalStatus.addEventListener('change', ()=>{
-        const show = (modalStatus.value === 'DidNotSignup');
-        modalReason.style.display = show ? 'block' : 'none';
-        if(modalReasonHeading) modalReasonHeading.style.display = show ? 'block' : 'none';
+        // show Årsag for both explicit "Ikke tilmeldt" and "Mødte ikke op"
+        const show = (modalStatus.value === 'DidNotSignup' || modalStatus.value === 'NotSignedUp');
+  modalReason.style.display = show ? 'block' : 'none';
+  if(modalReasonHeading) modalReasonHeading.style.display = (modalStatus.value === 'NotSignedUp') ? 'block' : 'none';
+        // ensure the textarea has a sensible height so the placeholder is visible
+        if(show) try{ autoResize(modalReason); }catch(e){}
       });
 
       // autosave helpers: debounce utility
@@ -335,12 +342,12 @@
         const row = document.createElement('div');
         row.className = 'trial-row';
         const left = document.createElement('div');
-  const statusMap = { 'Pending': 'Afventer', 'SignedUp': 'Tilmeldt', 'DidNotSignup': 'Blev ikke meldt ind' };
+  const statusMap = { 'Pending': 'Registreret', 'SignedUp': 'Tilmeldt', 'NotSignedUp': 'Ikke tilmeldt', 'DidNotSignup': 'Mødte ikke op' };
   const typeMap = { 'Class': 'Hold', 'Fitness': 'Fitness' };
-  const statusLabel = statusMap[trial.status] || 'Afventer';
+  const statusLabel = statusMap[trial.status] || 'Registreret';
   const typeLabel = typeMap[trial.trial_type] || trial.trial_type;
   left.innerHTML = `<strong>${trial.name}</strong> <div class="trial-meta">${typeLabel} • ${trial.time} • <em>${statusLabel}</em></div>`;
-        if(trial.status === 'DidNotSignup' && trial.reason){
+    if((trial.status === 'DidNotSignup' || trial.status === 'NotSignedUp') && trial.reason){
           const r = document.createElement('div'); r.className='trial-meta'; r.style.marginTop='4px'; r.textContent = 'Årsag: ' + trial.reason; left.appendChild(r);
         }
         const actions = document.createElement('div');
@@ -359,8 +366,9 @@
         });
         actions.appendChild(edit); actions.appendChild(del);
         // apply tint class based on status
-        if(trial.status === 'SignedUp') row.classList.add('signedup');
-        if(trial.status === 'DidNotSignup') row.classList.add('didnotsignup');
+  if(trial.status === 'SignedUp') row.classList.add('signedup');
+  if(trial.status === 'DidNotSignup') row.classList.add('didnotsignup');
+  if(trial.status === 'NotSignedUp') row.classList.add('notSignedUp');
         row.appendChild(left); row.appendChild(actions);
         return row;
       }
